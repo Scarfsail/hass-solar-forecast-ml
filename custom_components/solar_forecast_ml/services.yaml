@@ -1,0 +1,43 @@
+train:
+  name: Train ML Model
+  description: Train the solar power prediction model
+  fields:
+    days_back:
+      name: Days Back
+      description: Number of days to look back for training data
+      required: false
+      default: 60
+      example: 60
+      selector:
+        number:
+          min: 1
+          mode: box
+    hours_offset:
+      name: Hours Offset
+      description: Number of hours offset for training data
+      required: false
+      default: 1
+      example: 1
+      selector:
+        number:
+          min: 1
+          mode: box
+
+predict:
+  name: Predict Solar Power
+  description: Predict solar power output for a given time period
+  fields:
+    from:
+      name: From
+      description: Start datetime for prediction period
+      required: true
+      example: "2024-02-01 00:00:00"
+      selector:
+        datetime: {}
+    to:
+      name: To
+      description: End datetime for prediction period
+      required: true
+      example: "2024-02-02 00:00:00"
+      selector:
+        datetime: {}

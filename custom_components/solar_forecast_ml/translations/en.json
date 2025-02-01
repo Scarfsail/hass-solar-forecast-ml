@@ -1,0 +1,22 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Solar Forecast ML Setup",
+                "description": "Set up your solar panel location and power sensor",
+                "data": {
+                    "latitude": "Latitude",
+                    "longitude": "Longitude",
+                    "timezone": "Timezone",
+                    "pv_power_entity_id": "PV Power Sensor"
+                }
+            }
+        },
+        "error": {
+            "invalid_timezone": "Invalid timezone specified"
+        },
+        "abort": {
+            "single_instance_allowed": "Only a single instance is allowed."
+        }
+    }
+}

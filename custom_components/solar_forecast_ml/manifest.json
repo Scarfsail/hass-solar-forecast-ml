@@ -1,0 +1,16 @@
+{
+    "domain": "solar_forecast_ml",
+    "name": "Solar Forecast ML",
+    "version": "1.0.0",
+    "dependencies": [],
+    "codeowners": ["@scarfsail"],
+    "requirements": [
+      "joblib",
+      "pandas",
+      "requests",
+      "astral",
+      "pysolar",
+      "scikit-learn"
+    ],
+    "config_flow": true
+  }
