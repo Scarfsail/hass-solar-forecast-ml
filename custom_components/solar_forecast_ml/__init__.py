@@ -146,7 +146,8 @@ async def handle_predict_service(call: ServiceCall):
     try:
         # Gather forecast meteo data (hourly then interpolated to 15-min intervals)
         def get_forecast():
-            return model.collect_forecast_meteo_data(from_dt, to_dt)
+            # return model.collect_forecast_meteo_data(from_dt, to_dt)
+            return model.collect_meteo_data(from_dt, to_dt)
 
         forecast_data = await hass.async_add_executor_job(get_forecast)
         _LOGGER.info("Collected %d forecast meteo records", len(forecast_data))

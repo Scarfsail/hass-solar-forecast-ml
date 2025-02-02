@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import TypedDict
 from zoneinfo import ZoneInfo
@@ -7,6 +8,7 @@ from astral.sun import sun
 import joblib
 import pandas as pd
 import requests
+from sklearn.model_selection import cross_val_score
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -41,17 +43,17 @@ class SensorDataRecord(TypedDict):
     power: float
 
 
-def is_daytime(dt):
+def is_daytime(dt: datetime):
     """Return True if dt is between sunrise and sunset."""
     s = sun(LOCATION.observer, date=dt.date(), tzinfo=dt.tzinfo)
-    return s["sunrise"] <= dt <= s["sunset"]
+    return s["dawn"] <= dt <= s["dusk"]
 
 
-def get_sun_position(dt):
-    """
-    Return sun altitude and azimuth for a given datetime.
+def get_sun_position(dt: datetime):
+    """Return sun altitude and azimuth for a given datetime.
     Uses pysolar if available; otherwise returns 0.0 for both.
     """
+
     try:
         from pysolar.solar import get_altitude, get_azimuth
 
@@ -122,69 +124,6 @@ def collect_meteo_data(from_date, to_date):
     return records
 
 
-def collect_forecast_meteo_data(from_dt, to_dt):
-    """
-    Collect forecast meteo data from Open-Meteo for the given datetime range.
-    The API is queried at hourly resolution.
-    Returns a list of dictionaries (one per hour) with all required features.
-    """
-
-    start_date = from_dt.date()
-    end_date = to_dt.date()
-    url = (
-        f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}"
-        "&hourly=temperature_2m,relativehumidity_2m,rain,showers,snowfall,cloudcover,"
-        "cloudcover_low,cloudcover_mid,cloudcover_high,visibility,shortwave_radiation,"
-        "direct_radiation,diffuse_radiation,direct_normal_irradiance,terrestrial_radiation"
-        f"&start_date={start_date:%Y-%m-%d}&end_date={end_date:%Y-%m-%d}"
-    )
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
-    hourly = data.get("hourly", {})
-
-    # Build a DataFrame from the hourly data.
-    times = pd.to_datetime(hourly.get("time", []))
-    # Ensure all times are timezone-aware.
-
-    times = times.map(
-        lambda t: t if t.tzinfo else t.replace(tzinfo=ZoneInfo("Europe/Prague"))
-    )
-
-    df = pd.DataFrame(
-        {
-            "time": times,
-            "temperature": hourly.get("temperature_2m", []),
-            "humidity": hourly.get("relativehumidity_2m", []),
-            "rain": hourly.get("rain", []),
-            "showers": hourly.get("showers", []),
-            "snowfall": hourly.get("snowfall", []),
-            "cloudcover": hourly.get("cloudcover", []),
-            "cloudcover_low": hourly.get("cloudcover_low", []),
-            "cloudcover_mid": hourly.get("cloudcover_mid", []),
-            "cloudcover_high": hourly.get("cloudcover_high", []),
-            "visibility": hourly.get("visibility", []),
-            "shortwave_radiation": hourly.get("shortwave_radiation", []),
-            "direct_radiation": hourly.get("direct_radiation", []),
-            "diffuse_radiation": hourly.get("diffuse_radiation", []),
-            "direct_normal_radiation": hourly.get("direct_normal_irradiance", []),
-            "terrestrial_radiation": hourly.get("terrestrial_radiation", []),
-        }
-    )
-
-    # Filter the data to include only the rows within the provided datetime range.
-    df = df[(df["time"] >= from_dt) & (df["time"] <= to_dt)]
-
-    # Compute sun position for each timestamp.
-    df["sun_altitude"], df["sun_azimuth"] = zip(
-        *df["time"].apply(lambda dt: get_sun_position(dt))
-    )
-
-    # Return the records as a list of dictionaries.
-    records = df.to_dict(orient="records")
-    return records
-
-
 def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
     """
     Collect historical sensor data from Home Assistant for the given entity.
@@ -223,12 +162,12 @@ def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
     df["time"] = (
         pd.to_datetime(df["last_updated_ts"], unit="s", utc=True)
         .dt.tz_convert("Europe/Prague")
-        .dt.ceil("H")
+        .dt.floor("H")
     )
 
     # Convert the sensor state to float (assuming it's a numeric value representing power)
     df["power"] = df["state"].astype(float)
-    df = df.groupby("time", as_index=False).mean()
+    df = df.groupby("time", as_index=False).median()
     # Create the final list of dictionaries with only the required keys.
     return df[["time", "power"]].to_dict(orient="records")
 
@@ -251,6 +190,8 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
     The data_df must include all meteo features and a 'power' column.
     Saves the trained model and scaler to the provided paths.
     """
+    _LOGGER.info("Starting training with %d records", len(data_df))
+
     feature_cols = [
         "temperature",
         "humidity",
@@ -282,8 +223,20 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
 
     # Create and train the MLP regressor
     model = MLPRegressor(
-        hidden_layer_sizes=(64, 32), activation="relu", solver="adam", max_iter=500
+        hidden_layer_sizes=(128, 64),
+        activation="relu",
+        learning_rate="adaptive",
+        solver="adam",
+        max_iter=5000,
     )
+
+    # Perform 5-fold cross validation
+    # cv_scores = cross_val_score(model, X_scaled, y, cv=5, scoring="r2")
+    # _LOGGER.info(f"Cross-validation R² scores: {cv_scores}")
+    # _LOGGER.info(
+    #    f"Mean R² score: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})"
+    # )
+
     model.fit(X_scaled, y)
 
     # Save the model and scaler
