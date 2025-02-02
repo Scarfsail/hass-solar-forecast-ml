@@ -1,4 +1,5 @@
 import logging
+from typing import TypedDict
 from zoneinfo import ZoneInfo
 
 from astral import LocationInfo
@@ -9,6 +10,7 @@ import requests
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
+from homeassistant.components.recorder import history
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 
 from .const import CONF_PV_POWER_ENTITY, CONF_TIMEZONE
@@ -32,6 +34,11 @@ def set_config(config: dict):
     TIMEZONE = config.get(CONF_TIMEZONE)
     PV_POWER_ENTITY_ID = config.get(CONF_PV_POWER_ENTITY)
     LOCATION = LocationInfo("Location", "Country", TIMEZONE, LATITUDE, LONGITUDE)
+
+
+class SensorDataRecord(TypedDict):
+    time: pd.Timestamp
+    power: float
 
 
 def is_daytime(dt):
@@ -139,7 +146,6 @@ def collect_forecast_meteo_data(from_dt, to_dt):
     # Build a DataFrame from the hourly data.
     times = pd.to_datetime(hourly.get("time", []))
     # Ensure all times are timezone-aware.
-    from zoneinfo import ZoneInfo
 
     times = times.map(
         lambda t: t if t.tzinfo else t.replace(tzinfo=ZoneInfo("Europe/Prague"))
@@ -179,13 +185,14 @@ def collect_forecast_meteo_data(from_dt, to_dt):
     return records
 
 
-def collect_sensor_data(hass, start_time, end_time, entity_id=PV_POWER_ENTITY_ID):
+def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
     """
     Collect historical sensor data from Home Assistant for the given entity.
     Returns a list of dictionaries with keys 'time' and 'power'.
     Uses the recorder's history API.
     """
-    from homeassistant.components.recorder import history
+
+    entity_id = PV_POWER_ENTITY_ID
 
     states = history.state_changes_during_period(hass, start_time, end_time, entity_id)
     sensor_states = states.get(entity_id, [])
@@ -205,6 +212,25 @@ def collect_sensor_data(hass, start_time, end_time, entity_id=PV_POWER_ENTITY_ID
         df = df.groupby("time", as_index=False).mean()
         return df.to_dict(orient="records")
     return []
+
+
+def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
+    # Read the CSV file.
+    # If your CSV doesn't include a header, specify header=None and provide column names.
+    df = pd.read_csv(csv_file_name)
+
+    # Convert the Unix timestamp (with fractional seconds) to a pandas Timestamp with UTC timezone.
+    df["time"] = (
+        pd.to_datetime(df["last_updated_ts"], unit="s", utc=True)
+        .dt.tz_convert("Europe/Prague")
+        .dt.ceil("H")
+    )
+
+    # Convert the sensor state to float (assuming it's a numeric value representing power)
+    df["power"] = df["state"].astype(float)
+    df = df.groupby("time", as_index=False).mean()
+    # Create the final list of dictionaries with only the required keys.
+    return df[["time", "power"]].to_dict(orient="records")
 
 
 def merge_data(meteo_records, sensor_records):

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 import homeassistant.helpers.config_validation as cv
 
 # Import model functions from model.py
@@ -26,6 +26,9 @@ TRAIN_SERVICE_SCHEMA = vol.Schema(
     }
 )
 
+TRAIN_FROM_CSV_SERVICE_SCHEMA = vol.Schema(
+    {vol.Required("csv_file", default="pv_power.csv"): cv.string}
+)
 # Schema for the prediction service.
 # Expects 'from' and 'to' datetime values.
 PREDICT_SERVICE_SCHEMA = vol.Schema(
@@ -39,26 +42,58 @@ PREDICT_SERVICE_SCHEMA = vol.Schema(
 async def handle_train_service(call: ServiceCall):
     """Handle the solar forecast training service call."""
     hass = call.hass
+    _LOGGER.info("Collecting training data ...")
+
+    # Retrieve sensor data for the same period
     days_back = call.data.get("days_back", 60)
     hours_offset = call.data.get("hours_offset", 1)
-    now = datetime.now()
-    start_date = (now - timedelta(days=days_back)).date()
-    end_date = (now - timedelta(hours=hours_offset)).date()
-    _LOGGER.info("Collecting training data from %s to %s", start_date, end_date)
 
+    now = datetime.now()
+    sensor_start = now - timedelta(days=days_back)
+    sensor_end = now - timedelta(hours=hours_offset)
+    _LOGGER.info(
+        "Collecting sensor training data from %s to %s", sensor_start, sensor_end
+    )
+
+    sensor_records = await hass.async_add_executor_job(
+        model.collect_sensor_data, hass, sensor_start, sensor_end
+    )
+    _LOGGER.info("Collected %d sensor records", len(sensor_records))
+    await train_model(hass, sensor_records)
+
+
+async def handle_train_from_csv_service(call: ServiceCall):
+    """Handle the solar forecast training service call."""
+    hass = call.hass
+    _LOGGER.info("Collecting training data ...")
+
+    # Retrieve sensor data for the same period
+    csv_file_name = hass.config.path(call.data.get("csv_file"))
+
+    _LOGGER.info("Collecting sensor training data from CSV %s ", csv_file_name)
+
+    sensor_records = await hass.async_add_executor_job(
+        model.collect_sensor_csv_data, csv_file_name
+    )
+    _LOGGER.info("Collected %d sensor records", len(sensor_records))
+    await train_model(hass, sensor_records)
+
+
+async def train_model(
+    hass: HomeAssistant, sensor_records: list[model.SensorDataRecord]
+):
+    times = [entry["time"] for entry in sensor_records]
+
+    # Compute the min and max timestamps
+    start_date = min(times)
+    end_date = max(times)
+
+    _LOGGER.info("Collecting meteo training data from %s to %s", start_date, end_date)
     # Collect historical meteo data (runs in executor as it is blocking)
     meteo_records = await hass.async_add_executor_job(
         model.collect_meteo_data, start_date, end_date
     )
     _LOGGER.info("Collected %d meteo records", len(meteo_records))
-
-    # Retrieve sensor data for the same period
-    sensor_start = now - timedelta(days=days_back)
-    sensor_end = now - timedelta(hours=hours_offset)
-    sensor_records = await hass.async_add_executor_job(
-        model.collect_sensor_data, hass, sensor_start, sensor_end
-    )
-    _LOGGER.info("Collected %d sensor records", len(sensor_records))
 
     if not meteo_records or not sensor_records:
         _LOGGER.error("Not enough data collected for training.")
@@ -147,6 +182,8 @@ async def handle_predict_service(call: ServiceCall):
             predictions[-1] if predictions else 0,
             {"predictions": result},
         )
+
+        return {"predictions": result}
     except Exception as e:
         _LOGGER.error("Error during prediction: %s", e)
 
@@ -175,7 +212,18 @@ async def async_setup_entry(hass: HomeAssistant, entry):
     )
 
     hass.services.async_register(
-        DOMAIN, "predict", handle_predict_service, schema=PREDICT_SERVICE_SCHEMA
+        DOMAIN,
+        "train_from_csv",
+        handle_train_from_csv_service,
+        schema=TRAIN_FROM_CSV_SERVICE_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        "predict",
+        handle_predict_service,
+        schema=PREDICT_SERVICE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
     model.set_config(entry.data)
 

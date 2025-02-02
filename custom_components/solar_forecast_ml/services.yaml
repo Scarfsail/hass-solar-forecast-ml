@@ -23,6 +23,21 @@ train:
           min: 1
           mode: box
 
+train_from_csv:
+  name: Train ML Model from CSV
+  description: Train the solar power prediction model from PV Power values stored in CSV
+  fields:
+    csv_file:
+      name: CSV File Name
+      description: File name of the CSV file containing PV Power values
+      required: true
+      default: 'pv_power.csv'
+      example: 'pv_power.csv'
+      selector:
+        text:
+          mode: box
+
+
 predict:
   name: Predict Solar Power
   description: Predict solar power output for a given time period
