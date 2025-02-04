@@ -8,7 +8,7 @@ from astral.sun import sun
 import joblib
 import pandas as pd
 import requests
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -46,7 +46,9 @@ class SensorDataRecord(TypedDict):
 def is_daytime(dt: datetime):
     """Return True if dt is between sunrise and sunset."""
     s = sun(LOCATION.observer, date=dt.date(), tzinfo=dt.tzinfo)
-    return s["dawn"] <= dt <= s["dusk"]
+    dawn = s["dawn"] - datetime.timedelta(hours=1)
+    dusk = s["dusk"] + datetime.timedelta(hours=1)
+    return dawn <= dt <= dusk
 
 
 def get_sun_position(dt: datetime):
@@ -66,7 +68,7 @@ def get_sun_position(dt: datetime):
     return altitude, azimuth
 
 
-def collect_meteo_data(from_date, to_date):
+def collect_meteo_data(from_date, to_date, skip_night=True):
     """
     Collect historical meteo data from the Open-Meteo API between from_date and to_date.
     The dates must be datetime.date objects.
@@ -77,9 +79,9 @@ def collect_meteo_data(from_date, to_date):
         "&hourly=temperature_2m,relativehumidity_2m,rain,showers,snowfall,cloudcover,"
         "cloudcover_low,cloudcover_mid,cloudcover_high,visibility,shortwave_radiation,"
         "direct_radiation,diffuse_radiation,direct_normal_irradiance,terrestrial_radiation"
-        f"&start_date={from_date:%Y-%m-%d}&end_date={to_date:%Y-%m-%d}"
+        f"&start_date={from_date:%Y-%m-%d}&end_date={to_date:%Y-%m-%d}&timezone=Europe%2FBerlin"
     )
-    response = requests.get(url)
+    response = requests.get(url, timeout=5)
     response.raise_for_status()
     data = response.json()
     hourly = data.get("hourly", {})
@@ -94,7 +96,7 @@ def collect_meteo_data(from_date, to_date):
                 dt = dt.replace(tzinfo=ZoneInfo("Europe/Prague"))
 
             # Only include daytime records
-            if not is_daytime(dt):
+            if not is_daytime(dt) and skip_night:
                 continue
 
             altitude, azimuth = get_sun_position(dt)
@@ -128,7 +130,7 @@ def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
     """
     Collect historical sensor data from Home Assistant for the given entity.
     Returns a list of dictionaries with keys 'time' and 'power'.
-    Uses the recorder's history API.
+    Uses the recorder's history API and fills gaps with zero power values.
     """
 
     entity_id = PV_POWER_ENTITY_ID
@@ -149,6 +151,20 @@ def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
     if records:
         df = pd.DataFrame(records)
         df = df.groupby("time", as_index=False).mean()
+
+        # Create complete hourly range
+        # full_range = pd.date_range(
+        #    start=start_time.replace(minute=0, second=0, microsecond=0),
+        #    end=end_time.replace(minute=0, second=0, microsecond=0),
+        #    freq="H",
+        #    tz=start_time.tzinfo,
+        # )
+
+        # Create complete DataFrame with zeros for missing hours
+        # complete_df = pd.DataFrame({"time": full_range})
+        # df = pd.merge(complete_df, df, on="time", how="left")
+        # df["power"] = df["power"].fillna(0)
+
         return df.to_dict(orient="records")
     return []
 
@@ -160,15 +176,26 @@ def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
 
     # Convert the Unix timestamp (with fractional seconds) to a pandas Timestamp with UTC timezone.
     df["time"] = (
-        pd.to_datetime(df["last_updated_ts"], unit="s", utc=True)
-        .dt.tz_convert("Europe/Prague")
-        .dt.floor("H")
+        pd.to_datetime(df["last_updated_ts"], unit="s", utc=False)
+        .dt.tz_localize("Europe/Prague")
+        .dt.ceil("H")
     )
 
     # Convert the sensor state to float (assuming it's a numeric value representing power)
     df["power"] = df["state"].astype(float)
-    df = df.groupby("time", as_index=False).median()
-    # Create the final list of dictionaries with only the required keys.
+    df = df.groupby("time", as_index=False).mean()
+    # Remove records where power is 0
+    df = df[df["power"] > 0]
+    # Create complete hourly range
+    # full_range = pd.date_range(
+    #    start=df["time"].min(), end=df["time"].max(), freq="H", tz=df["time"].dt.tz
+    # )
+
+    # Create complete DataFrame with zeros for missing hours
+    # complete_df = pd.DataFrame({"time": full_range})
+    # df = pd.merge(complete_df, df, on="time", how="left")
+    # df["power"] = df["power"].fillna(0)
+
     return df[["time", "power"]].to_dict(orient="records")
 
 
@@ -223,6 +250,7 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
 
     # Create and train the MLP regressor
     model = MLPRegressor(
+        random_state=42,  # for reproducibility
         hidden_layer_sizes=(128, 64),
         activation="relu",
         learning_rate="adaptive",

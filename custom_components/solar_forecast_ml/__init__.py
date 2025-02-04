@@ -91,7 +91,7 @@ async def train_model(
     _LOGGER.info("Collecting meteo training data from %s to %s", start_date, end_date)
     # Collect historical meteo data (runs in executor as it is blocking)
     meteo_records = await hass.async_add_executor_job(
-        model.collect_meteo_data, start_date, end_date
+        model.collect_meteo_data, start_date, end_date, False
     )
     _LOGGER.info("Collected %d meteo records", len(meteo_records))
 
@@ -118,6 +118,10 @@ async def train_model(
             epochs=50,
         )
 
+    # Save training data to CSV with current timestamp
+    csv_filename = "solar_training_data.csv"
+    data_df.to_csv(hass.config.path(csv_filename), index=False)
+    _LOGGER.info("Training data saved to %s", csv_filename)
     try:
         await hass.async_add_executor_job(train)
         _LOGGER.info(
@@ -147,7 +151,7 @@ async def handle_predict_service(call: ServiceCall):
         # Gather forecast meteo data (hourly then interpolated to 15-min intervals)
         def get_forecast():
             # return model.collect_forecast_meteo_data(from_dt, to_dt)
-            return model.collect_meteo_data(from_dt, to_dt)
+            return model.collect_meteo_data(from_dt, to_dt, True)
 
         forecast_data = await hass.async_add_executor_job(get_forecast)
         _LOGGER.info("Collected %d forecast meteo records", len(forecast_data))
