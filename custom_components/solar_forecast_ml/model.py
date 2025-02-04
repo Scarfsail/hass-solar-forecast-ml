@@ -8,7 +8,6 @@ from astral.sun import sun
 import joblib
 import pandas as pd
 import requests
-from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -30,24 +29,14 @@ PV_POWER_ENTITY_ID = None
 # Define meteo parameters - use same names for API and records
 METEO_PARAMS = [
     "temperature_2m",
-    "relativehumidity_2m",
-    "rain",
-    "showers",
-    "snowfall",
-    "cloudcover",
-    "cloudcover_low",
-    "cloudcover_mid",
-    "cloudcover_high",
-    "visibility",
-    "shortwave_radiation",
+    # "shortwave_radiation",
     "direct_radiation",
     "diffuse_radiation",
     "direct_normal_irradiance",
-    "terrestrial_radiation",
 ]
 
 # Update feature_cols to use the same parameter names
-feature_cols = METEO_PARAMS + ["sun_altitude", "sun_azimuth"]
+feature_cols = METEO_PARAMS  # + ["sun_altitude", "sun_azimuth"]
 
 
 def set_config(config: dict):
@@ -73,23 +62,6 @@ def is_daytime(dt: datetime):
     return dawn <= dt <= dusk
 
 
-def get_sun_position(dt: datetime):
-    """Return sun altitude and azimuth for a given datetime.
-    Uses pysolar if available; otherwise returns 0.0 for both.
-    """
-
-    try:
-        from pysolar.solar import get_altitude, get_azimuth
-
-        altitude = get_altitude(LATITUDE, LONGITUDE, dt)
-        azimuth = get_azimuth(LATITUDE, LONGITUDE, dt)
-    except ImportError:
-        _LOGGER.warning("pysolar not installed, sun position set to 0.0")
-        altitude = 0.0
-        azimuth = 0.0
-    return altitude, azimuth
-
-
 def collect_meteo_data(from_date, to_date, skip_night=True):
     """
     Collect historical meteo data from the Open-Meteo API between from_date and to_date.
@@ -98,37 +70,33 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
     """
     url = (
         f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}"
-        f"&hourly={','.join(METEO_PARAMS)}"
-        f"&start_date={from_date:%Y-%m-%d}&end_date={to_date:%Y-%m-%d}&timezone=Europe%2FBerlin"
+        f"&minutely_15={','.join(METEO_PARAMS)}"
+        f"&start_date={from_date:%Y-%m-%d}&end_date={to_date:%Y-%m-%d}"
     )
     response = requests.get(url, timeout=5)
     response.raise_for_status()
     data = response.json()
-    hourly = data.get("hourly", {})
+    minutely_15 = data.get("minutely_15", {})
     records = []
-    times = hourly.get("time", [])
+    times = minutely_15.get("time", [])
     for i, time in enumerate(times):
         try:
-            dt = pd.to_datetime(time)
+            dt = pd.to_datetime(time, utc=True).tz_convert(TIMEZONE)
+
             # Ensure dt is timezone-aware.
 
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=ZoneInfo("Europe/Prague"))
+            # if dt.tzinfo is None:
+            #     dt = dt.replace(tzinfo=ZoneInfo("Europe/Prague"))
 
             # Only include daytime records
             if not is_daytime(dt) and skip_night:
                 continue
 
-            altitude, azimuth = get_sun_position(dt)
             record = {"time": dt}
 
             # Add all meteo parameters to the record
             for param in METEO_PARAMS:
-                record[param] = float(hourly[param][i])
-
-            # Add sun position
-            record["sun_altitude"] = altitude
-            record["sun_azimuth"] = azimuth
+                record[param] = float(minutely_15[param][i])
 
             records.append(record)
         except Exception as e:
@@ -186,9 +154,9 @@ def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
 
     # Convert the Unix timestamp (with fractional seconds) to a pandas Timestamp with UTC timezone.
     df["time"] = (
-        pd.to_datetime(df["last_updated_ts"], unit="s", utc=False)
-        .dt.tz_localize("Europe/Prague")
-        .dt.ceil("H")
+        pd.to_datetime(df["last_updated_ts"], unit="s", utc=True)
+        .dt.tz_convert(TIMEZONE)
+        .dt.floor("15min")
     )
 
     # Convert the sensor state to float (assuming it's a numeric value representing power)
@@ -242,11 +210,11 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
     # Create and train the MLP regressor
     model = MLPRegressor(
         random_state=42,  # for reproducibility
-        hidden_layer_sizes=(128, 64),
+        hidden_layer_sizes=(64, 32),
         activation="relu",
-        learning_rate="adaptive",
+        learning_rate="constant",
         solver="adam",
-        max_iter=5000,
+        max_iter=1000,
     )
 
     # Perform 5-fold cross validation

@@ -9,7 +9,6 @@
       "pandas",
       "requests",
       "astral",
-      "pysolar",
       "scikit-learn"
     ],
     "config_flow": true
