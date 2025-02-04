@@ -27,6 +27,28 @@ TIMEZONE = None
 LOCATION = None
 PV_POWER_ENTITY_ID = None
 
+# Define meteo parameters - use same names for API and records
+METEO_PARAMS = [
+    "temperature_2m",
+    "relativehumidity_2m",
+    "rain",
+    "showers",
+    "snowfall",
+    "cloudcover",
+    "cloudcover_low",
+    "cloudcover_mid",
+    "cloudcover_high",
+    "visibility",
+    "shortwave_radiation",
+    "direct_radiation",
+    "diffuse_radiation",
+    "direct_normal_irradiance",
+    "terrestrial_radiation",
+]
+
+# Update feature_cols to use the same parameter names
+feature_cols = METEO_PARAMS + ["sun_altitude", "sun_azimuth"]
+
 
 def set_config(config: dict):
     """Set configuration values from the config entry."""
@@ -76,9 +98,7 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
     """
     url = (
         f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}"
-        "&hourly=temperature_2m,relativehumidity_2m,rain,showers,snowfall,cloudcover,"
-        "cloudcover_low,cloudcover_mid,cloudcover_high,visibility,shortwave_radiation,"
-        "direct_radiation,diffuse_radiation,direct_normal_irradiance,terrestrial_radiation"
+        f"&hourly={','.join(METEO_PARAMS)}"
         f"&start_date={from_date:%Y-%m-%d}&end_date={to_date:%Y-%m-%d}&timezone=Europe%2FBerlin"
     )
     response = requests.get(url, timeout=5)
@@ -100,26 +120,16 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
                 continue
 
             altitude, azimuth = get_sun_position(dt)
-            record = {
-                "time": dt,
-                "temperature": float(hourly["temperature_2m"][i]),
-                "humidity": float(hourly["relativehumidity_2m"][i]),
-                "rain": float(hourly["rain"][i]),
-                "showers": float(hourly["showers"][i]),
-                "snowfall": float(hourly["snowfall"][i]),
-                "cloudcover": float(hourly["cloudcover"][i]),
-                "cloudcover_low": float(hourly["cloudcover_low"][i]),
-                "cloudcover_mid": float(hourly["cloudcover_mid"][i]),
-                "cloudcover_high": float(hourly["cloudcover_high"][i]),
-                "visibility": float(hourly["visibility"][i]),
-                "shortwave_radiation": float(hourly["shortwave_radiation"][i]),
-                "direct_radiation": float(hourly["direct_radiation"][i]),
-                "diffuse_radiation": float(hourly["diffuse_radiation"][i]),
-                "direct_normal_radiation": float(hourly["direct_normal_irradiance"][i]),
-                "terrestrial_radiation": float(hourly["terrestrial_radiation"][i]),
-                "sun_altitude": altitude,
-                "sun_azimuth": azimuth,
-            }
+            record = {"time": dt}
+
+            # Add all meteo parameters to the record
+            for param in METEO_PARAMS:
+                record[param] = float(hourly[param][i])
+
+            # Add sun position
+            record["sun_altitude"] = altitude
+            record["sun_azimuth"] = azimuth
+
             records.append(record)
         except Exception as e:
             _LOGGER.error(f"Error processing meteo record index {i}: {e}")
@@ -219,25 +229,6 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
     """
     _LOGGER.info("Starting training with %d records", len(data_df))
 
-    feature_cols = [
-        "temperature",
-        "humidity",
-        "rain",
-        "showers",
-        "snowfall",
-        "cloudcover",
-        "cloudcover_low",
-        "cloudcover_mid",
-        "cloudcover_high",
-        "visibility",
-        "shortwave_radiation",
-        "direct_radiation",
-        "diffuse_radiation",
-        "direct_normal_radiation",
-        "terrestrial_radiation",
-        "sun_altitude",
-        "sun_azimuth",
-    ]
     for col in feature_cols + ["power"]:
         if col not in data_df.columns:
             raise ValueError(f"Column {col} not found in data.")
@@ -283,32 +274,9 @@ def load_model_and_scaler(model_path, scaler_path):
 def predict_power(model, scaler, forecast_data):
     """
     Given forecast_data (a list of dictionaries with meteo features), predict panel power.
-    The dictionaries must contain:
-      - temperature, humidity, rain, showers, snowfall, cloudcover,
-      - cloudcover_low, cloudcover_mid, cloudcover_high, visibility,
-      - shortwave_radiation, direct_radiation, diffuse_radiation,
-      - direct_normal_radiation, terrestrial_radiation, sun_altitude, sun_azimuth
     Returns a list of predictions.
     """
-    feature_cols = [
-        "temperature",
-        "humidity",
-        "rain",
-        "showers",
-        "snowfall",
-        "cloudcover",
-        "cloudcover_low",
-        "cloudcover_mid",
-        "cloudcover_high",
-        "visibility",
-        "shortwave_radiation",
-        "direct_radiation",
-        "diffuse_radiation",
-        "direct_normal_radiation",
-        "terrestrial_radiation",
-        "sun_altitude",
-        "sun_azimuth",
-    ]
+
     df = pd.DataFrame(forecast_data)
     for col in feature_cols:
         if col not in df.columns:
