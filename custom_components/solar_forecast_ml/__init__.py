@@ -137,6 +137,7 @@ async def handle_predict_service(call: ServiceCall):
     from_dt = call.data.get("from")
     to_dt = call.data.get("to")
 
+    _LOGGER.info("Predicting power from %s to %s", from_dt, to_dt)
     if not from_dt or not to_dt:
         _LOGGER.error("Missing 'from' or 'to' in forecast service call.")
         return

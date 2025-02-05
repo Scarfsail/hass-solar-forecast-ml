@@ -8,6 +8,7 @@ from astral.sun import sun
 import joblib
 import pandas as pd
 import requests
+from sklearn.model_selection import cross_val_score
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -210,11 +211,11 @@ def train_model(data_df, model_path, scaler_path, epochs=50):
     # Create and train the MLP regressor
     model = MLPRegressor(
         random_state=42,  # for reproducibility
-        hidden_layer_sizes=(64, 32),
+        hidden_layer_sizes=(128, 64),
         activation="relu",
-        learning_rate="constant",
+        learning_rate="adaptive",
         solver="adam",
-        max_iter=1000,
+        max_iter=5000,
     )
 
     # Perform 5-fold cross validation
