@@ -19,10 +19,10 @@ def get_schema(defaults=None):
         {
             vol.Required(
                 CONF_LATITUDE, default=defaults.get(CONF_LATITUDE, 50.08804)
-            ): float,
+            ): str,
             vol.Required(
                 CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE, 14.42076)
-            ): float,
+            ): str,
             vol.Required(
                 CONF_TIMEZONE, default=defaults.get(CONF_TIMEZONE, "Europe/Prague")
             ): str,
