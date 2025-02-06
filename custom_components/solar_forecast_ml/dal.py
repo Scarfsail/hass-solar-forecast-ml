@@ -79,56 +79,43 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
 
 
 def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
-    """
-    Collect historical sensor data from Home Assistant for the given entity.
-    Returns a list of dictionaries with keys 'time' and 'power'.
-    Uses the recorder's history API and fills gaps with zero power values.
-    """
     cfg = Configuration.get_instance()
     entity_id = cfg.pv_power_entity_id
 
     states = history.state_changes_during_period(hass, start_time, end_time, entity_id)
     sensor_states = states.get(entity_id, [])
-    records = []
-    for state in sensor_states:
-        try:
-            # Round timestamp to the hour (as in training)
-            if state.state == "unavailable":
-                continue
-            dt = state.last_changed.tz_convert(cfg.timezone).floor("15min")
-            power = float(state.state)
-            records.append({"time": dt, "power": power})
-        except Exception as e:
-            _LOGGER.error(f"Error processing sensor state: {e}")
-    if records:
-        df = pd.DataFrame(records)
-        df = df.groupby("time", as_index=False).mean()
-        df = df[df["power"] > 0]
+    sensor_states = [
+        {"last_updated_timestamp": state.last_updated.timestamp(), "state": state.state}
+        for state in sensor_states
+        if state.state not in ("unavailable", "unknown", "null", None)
+    ]
 
-        return df.to_dict(orient="records")
-    return []
+    return convert_sensor_data_to_dict(
+        pd.DataFrame(sensor_states), "last_updated_timestamp", "state"
+    )
 
 
 def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
-    # Read the CSV file.
-    # If your CSV doesn't include a header, specify header=None and provide column names.
-    df = pd.read_csv(csv_file_name)
+    return convert_sensor_data_to_dict(
+        pd.read_csv(csv_file_name), "last_updated_ts", "state"
+    )
 
-    # Convert the Unix timestamp (with fractional seconds) to a pandas Timestamp with UTC timezone.
+
+def convert_sensor_data_to_dict(
+    sensor_data: pd.DataFrame, time_column: str, power_column: str
+) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
-    df["time"] = (
-        pd.to_datetime(df["last_updated_ts"], unit="s", utc=True)
+
+    sensor_data["time"] = (
+        pd.to_datetime(sensor_data[time_column], unit="s", utc=True)
         .dt.tz_convert(cfg.timezone)
         .dt.floor("15min")
     )
-
-    # Convert the sensor state to float (assuming it's a numeric value representing power)
-    df["power"] = df["state"].astype(float)
-    df = df.groupby("time", as_index=False).mean()
-    # Remove records where power is 0
-    df = df[df["power"] > 0]
-
-    return df[["time", "power"]].to_dict(orient="records")
+    sensor_data["power"] = sensor_data[power_column].astype(float)
+    sensor_data = sensor_data[["time", "power"]]
+    sensor_data = sensor_data.groupby("time", as_index=False).mean()
+    sensor_data = sensor_data[sensor_data["power"] > 0]
+    return sensor_data.to_dict(orient="records")
 
 
 def merge_data(meteo_records, sensor_records):
