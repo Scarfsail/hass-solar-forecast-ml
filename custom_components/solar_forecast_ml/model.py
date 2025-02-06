@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
-from config.custom_components.solar_forecast_ml.dal import METEO_PARAMS
+from .dal import METEO_PARAMS
 
 _LOGGER = logging.getLogger(__name__)
 
