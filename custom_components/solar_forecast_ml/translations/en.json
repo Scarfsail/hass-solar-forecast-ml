@@ -8,7 +8,8 @@
                     "latitude": "Latitude",
                     "longitude": "Longitude",
                     "timezone": "Timezone",
-                    "pv_power_entity_id": "PV Power Sensor"
+                    "pv_power_entity_id": "PV Power Sensor",
+                    "CONF_POWER_CONSUMPTION_ENTITY": "Power Consumption Sensor"
                 }
             }
         },

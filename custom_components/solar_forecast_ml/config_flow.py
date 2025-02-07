@@ -7,7 +7,12 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.helpers import selector
 
-from .const import CONF_PV_POWER_ENTITY, CONF_TIMEZONE, DOMAIN
+from .const import (
+    CONF_POWER_CONSUMPTION_ENTITY,
+    CONF_PV_POWER_ENTITY,
+    CONF_TIMEZONE,
+    DOMAIN,
+)
 
 
 def get_schema(defaults=None):
@@ -28,6 +33,10 @@ def get_schema(defaults=None):
             ): str,
             vol.Required(
                 CONF_PV_POWER_ENTITY, default=defaults.get(CONF_PV_POWER_ENTITY)
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Required(
+                CONF_POWER_CONSUMPTION_ENTITY,
+                default=defaults.get(CONF_POWER_CONSUMPTION_ENTITY),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
         }
     )
@@ -81,12 +90,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 pytz.timezone(user_input[CONF_TIMEZONE])
-                return self.async_create_entry(title="", data=user_input)
+
+                # Use config_entry.options instead of config_entry.data for defaults
+                return self.async_create_entry(
+                    title="",
+                    # Merge existing options with new user input
+                    data=self.config_entry.options | user_input,
+                )
             except pytz.exceptions.UnknownTimeZoneError:
                 errors[CONF_TIMEZONE] = "invalid_timezone"
 
         return self.async_show_form(
             step_id="init",
-            data_schema=get_schema(self.config_entry.data),
+            # Use config_entry.options instead of config_entry.data for defaults
+            data_schema=get_schema(
+                {**self.config_entry.data, **self.config_entry.options}
+            ),
             errors=errors,
         )

@@ -56,3 +56,63 @@ solar_predict:
       example: "2024-02-02 00:00:00"
       selector:
         datetime: {}
+
+
+consumption_train_from_history:
+  name: Train power consumption ML Model from historical data
+  description: Train the power consumption prediction model
+  fields:
+    days_back:
+      name: Days Back
+      description: Number of days to look back for training data
+      required: false
+      default: 60
+      example: 60
+      selector:
+        number:
+          min: 1
+          mode: box
+    hours_offset:
+      name: Hours Offset
+      description: Number of hours offset for training data
+      required: false
+      default: 1
+      example: 1
+      selector:
+        number:
+          min: 1
+          mode: box
+
+consumption_train_from_csv:
+  name: Train Power Consumption ML Model from CSV
+  description: Train the power consumption prediction model from PV Power values stored in CSV
+  fields:
+    csv_file:
+      name: CSV File Name
+      description: File name of the CSV file containing Power Consumption values
+      required: true
+      default: 'pv_power.csv'
+      example: 'pv_power.csv'
+      selector:
+        text:
+          mode: box
+
+
+consumption_predict:
+  name: Predict Power Consumption
+  description: Predict power consumption for a given time period
+  fields:
+    from:
+      name: From
+      description: Start datetime for prediction period
+      required: true
+      example: "2024-02-01 00:00:00"
+      selector:
+        datetime: {}
+    to:
+      name: To
+      description: End datetime for prediction period
+      required: true
+      example: "2024-02-02 00:00:00"
+      selector:
+        datetime: {}

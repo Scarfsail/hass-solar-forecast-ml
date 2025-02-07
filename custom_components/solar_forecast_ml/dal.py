@@ -130,3 +130,33 @@ def merge_meteo_and_pv_power_data(meteo_records, pv_power_records):
     df = pd.merge(df_meteo, df_sensor, on="time", how="inner")
     df = df.sort_values("time")
     return df
+
+
+def collect_consumption_data(hass, start_time, end_time):
+    """
+    Collect historical energy consumption data from the given sensor between start_time and end_time.
+    Returns a DataFrame with one record per hour (averaged if multiple records exist)
+    and adds features: hour (0-23) and day_of_week (Monday=0, Sunday=6).
+    """
+    cfg = Configuration.get_instance()
+    sensor_id = cfg.power_consumption_entity_id
+    states = history.state_changes_during_period(hass, start_time, end_time, sensor_id)
+    sensor_states = states.get(sensor_id, [])
+    records = []
+    for state in sensor_states:
+        try:
+            if state.state == "unavailable":
+                continue
+            # Round timestamp to the hour
+            dt = state.last_changed.replace(minute=0, second=0, microsecond=0)
+            power = float(state.state)
+            records.append({"time": dt, "power": power})
+        except Exception as e:
+            _LOGGER.error(f"Error processing sensor state: {e}")
+    if records:
+        df = pd.DataFrame(records)
+        df = df.groupby("time", as_index=False).mean()
+        df["hour"] = df["time"].dt.hour
+        df["day_of_week"] = df["time"].dt.dayofweek
+        return df
+    return pd.DataFrame()

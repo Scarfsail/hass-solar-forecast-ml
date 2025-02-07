@@ -28,9 +28,10 @@ async def async_setup_entry(hass: HomeAssistant, entry):
     """Set up the solar_forecast_ml integration."""
 
     # Save config entry data if needed.
-    hass.data.setdefault(DOMAIN, {})["config"] = entry.data
+    config = {**entry.data, **entry.options}
+    hass.data.setdefault(DOMAIN, {})["config"] = config
 
-    Configuration.get_instance().set_config(entry.data)
+    Configuration.get_instance().set_config(config, hass)
     register_services(hass)
 
     _LOGGER.info("Solar Forecast ML integration has been set up")
