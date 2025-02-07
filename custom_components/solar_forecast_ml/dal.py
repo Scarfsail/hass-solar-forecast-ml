@@ -78,7 +78,9 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
     return records
 
 
-def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
+def collect_pv_power_historical_data(
+    hass, start_time, end_time
+) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
     entity_id = cfg.pv_power_entity_id
 
@@ -90,18 +92,18 @@ def collect_sensor_data(hass, start_time, end_time) -> list[SensorDataRecord]:
         if state.state not in ("unavailable", "unknown", "null", None)
     ]
 
-    return convert_sensor_data_to_dict(
+    return convert_pv_power_data_to_dict(
         pd.DataFrame(sensor_states), "last_updated_timestamp", "state"
     )
 
 
-def collect_sensor_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
-    return convert_sensor_data_to_dict(
+def collect_pv_power_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
+    return convert_pv_power_data_to_dict(
         pd.read_csv(csv_file_name), "last_updated_ts", "state"
     )
 
 
-def convert_sensor_data_to_dict(
+def convert_pv_power_data_to_dict(
     sensor_data: pd.DataFrame, time_column: str, power_column: str
 ) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
@@ -118,13 +120,13 @@ def convert_sensor_data_to_dict(
     return sensor_data.to_dict(orient="records")
 
 
-def merge_data(meteo_records, sensor_records):
+def merge_meteo_and_pv_power_data(meteo_records, pv_power_records):
     """
     Merge meteo and sensor data on the 'time' column.
     Returns a pandas DataFrame.
     """
     df_meteo = pd.DataFrame(meteo_records)
-    df_sensor = pd.DataFrame(sensor_records)
+    df_sensor = pd.DataFrame(pv_power_records)
     df = pd.merge(df_meteo, df_sensor, on="time", how="inner")
     df = df.sort_values("time")
     return df

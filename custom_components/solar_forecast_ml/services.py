@@ -21,8 +21,8 @@ SCALER_PATH = "solar_scaler.pkl"
 def register_services(hass: HomeAssistant):
     hass.services.async_register(
         DOMAIN,
-        "train",
-        handle_train_service,
+        "solar_train_from_history",
+        handle_solar_train_from_history_service,
         schema=vol.Schema(
             {
                 vol.Optional("days_back", default=60): cv.positive_int,
@@ -33,8 +33,8 @@ def register_services(hass: HomeAssistant):
 
     hass.services.async_register(
         DOMAIN,
-        "train_from_csv",
-        handle_train_from_csv_service,
+        "solar_train_from_csv",
+        handle_solar_train_from_csv_service,
         schema=vol.Schema(
             {vol.Required("csv_file", default="pv_power.csv"): cv.string}
         ),
@@ -42,8 +42,8 @@ def register_services(hass: HomeAssistant):
 
     hass.services.async_register(
         DOMAIN,
-        "predict",
-        handle_predict_service,
+        "solar_predict",
+        handle_solar_predict_service,
         schema=vol.Schema(
             {
                 vol.Required("from"): cv.datetime,
@@ -54,7 +54,7 @@ def register_services(hass: HomeAssistant):
     )
 
 
-async def handle_train_service(call: ServiceCall):
+async def handle_solar_train_from_history_service(call: ServiceCall):
     """Handle the solar forecast training service call."""
     hass = call.hass
     _LOGGER.info("Collecting training data ...")
@@ -71,13 +71,13 @@ async def handle_train_service(call: ServiceCall):
     )
 
     sensor_records = await hass.async_add_executor_job(
-        dal.collect_sensor_data, hass, sensor_start, sensor_end
+        dal.collect_pv_power_historical_data, hass, sensor_start, sensor_end
     )
     _LOGGER.info("Collected %d sensor records", len(sensor_records))
-    await train_model(hass, sensor_records)
+    await solar_train_model(hass, sensor_records)
 
 
-async def handle_train_from_csv_service(call: ServiceCall):
+async def handle_solar_train_from_csv_service(call: ServiceCall):
     """Handle the solar forecast training service call."""
     hass = call.hass
     _LOGGER.info("Collecting training data ...")
@@ -88,13 +88,15 @@ async def handle_train_from_csv_service(call: ServiceCall):
     _LOGGER.info("Collecting sensor training data from CSV %s ", csv_file_name)
 
     sensor_records = await hass.async_add_executor_job(
-        dal.collect_sensor_csv_data, csv_file_name
+        dal.collect_pv_power_csv_data, csv_file_name
     )
     _LOGGER.info("Collected %d sensor records", len(sensor_records))
-    await train_model(hass, sensor_records)
+    await solar_train_model(hass, sensor_records)
 
 
-async def train_model(hass: HomeAssistant, sensor_records: list[dal.SensorDataRecord]):
+async def solar_train_model(
+    hass: HomeAssistant, sensor_records: list[dal.SensorDataRecord]
+):
     times = [entry["time"] for entry in sensor_records]
 
     # Compute the min and max timestamps
@@ -113,7 +115,7 @@ async def train_model(hass: HomeAssistant, sensor_records: list[dal.SensorDataRe
         return
 
     try:
-        data_df = dal.merge_data(meteo_records, sensor_records)
+        data_df = dal.merge_meteo_and_pv_power_data(meteo_records, sensor_records)
     except Exception as e:
         _LOGGER.error("Error merging data: %s", e)
         return
@@ -141,7 +143,7 @@ async def train_model(hass: HomeAssistant, sensor_records: list[dal.SensorDataRe
         _LOGGER.error("Error during training: %s", e)
 
 
-async def handle_predict_service(call: ServiceCall):
+async def handle_solar_predict_service(call: ServiceCall):
     """Handle the solar forecast prediction service call."""
     hass = call.hass
     from_dt = call.data.get("from")
