@@ -1,5 +1,3 @@
-import secrets
-
 import pytz
 import voluptuous as vol
 

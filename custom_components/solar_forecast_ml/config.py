@@ -3,7 +3,7 @@ from pathlib import Path
 from astral import LocationInfo
 
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
-from tests.common import HomeAssistant
+from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_POWER_CONSUMPTION_ENTITY,
