@@ -166,6 +166,6 @@ async def handle_predict_service(call: ServiceCall):
             {"predictions": result},
         )
 
-        return {"predictions": result}
+        # return {"predictions": result}
     except Exception as e:
         _LOGGER.error("Error during prediction: %s", e)

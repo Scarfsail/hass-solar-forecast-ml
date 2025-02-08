@@ -45,7 +45,7 @@ def register_services(hass: HomeAssistant):
                 vol.Required("to"): cv.datetime,
             }
         ),
-        supports_response=SupportsResponse.ONLY,
+        # supports_response=SupportsResponse.ONLY,
     )
 
     hass.services.async_register(
@@ -79,5 +79,5 @@ def register_services(hass: HomeAssistant):
                 vol.Required("to"): cv.datetime,
             }
         ),
-        supports_response=SupportsResponse.ONLY,
+        # supports_response=SupportsResponse.ONLY,
     )
