@@ -8,6 +8,7 @@ import requests
 import sqlalchemy as sa
 
 from homeassistant.components.recorder import get_instance, history
+from homeassistant.components.recorder.models import state
 
 from .config import Configuration
 
@@ -145,6 +146,7 @@ def get_aggregated_states(
             )
             .where(
                 sa.and_(
+                    states_table.c.state != "unavailable",
                     states_table.c.metadata_id == metadata_id_result,
                     states_table.c.last_updated_ts >= start_time_ts,
                     states_table.c.last_updated_ts < end_time_ts,
@@ -166,17 +168,9 @@ def collect_pv_power_historical_data(
     cfg = Configuration.get_instance()
     entity_id = cfg.pv_power_entity_id
 
-    # states = history.state_changes_during_period(hass, start_time, end_time, entity_id)
-    # sensor_states = states.get(entity_id, [])
     aggregated = get_aggregated_states(
         hass, start_time, end_time, entity_id, interval_minutes=15
     )
-
-    # sensor_states = [
-    #    {"last_updated_timestamp": state.last_updated.timestamp(), "state": state.state}
-    #    for state in sensor_states
-    #    if state.state not in ("unavailable", "unknown", "null", None)
-    # ]
 
     return convert_pv_power_data_to_dict(
         pd.DataFrame(aggregated), "time_interval", "avg_state"
@@ -194,15 +188,11 @@ def convert_pv_power_data_to_dict(
 ) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
 
-    sensor_data["time"] = (
-        pd.to_datetime(sensor_data[time_column], unit="s", utc=True).dt.tz_convert(
-            cfg.timezone
-        )
-        # .dt.floor("15min")
-    )
+    sensor_data["time"] = pd.to_datetime(
+        sensor_data[time_column], unit="s", utc=True
+    ).dt.tz_convert(cfg.timezone)
     sensor_data["power"] = sensor_data[power_column].astype(float)
     sensor_data = sensor_data[["time", "power"]]
-    # sensor_data = sensor_data.groupby("time", as_index=False).mean()
     sensor_data = sensor_data[sensor_data["power"] > 0]
     return sensor_data.to_dict(orient="records")
 
@@ -227,23 +217,17 @@ def collect_consumption_data(hass, start_time, end_time):
     """
     cfg = Configuration.get_instance()
     sensor_id = cfg.power_consumption_entity_id
-    states = history.state_changes_during_period(hass, start_time, end_time, sensor_id)
-    sensor_states = states.get(sensor_id, [])
-    records = []
-    for state in sensor_states:
-        try:
-            if state.state == "unavailable":
-                continue
-            # Round timestamp to the hour
-            dt = state.last_changed.replace(minute=0, second=0, microsecond=0)
-            power = float(state.state)
-            records.append({"time": dt, "power": power})
-        except Exception as e:
-            _LOGGER.error(f"Error processing sensor state: {e}")
-    if records:
-        df = pd.DataFrame(records)
-        df = df.groupby("time", as_index=False).mean()
+    aggregated = get_aggregated_states(
+        hass, start_time, end_time, sensor_id, interval_minutes=60
+    )
+
+    if aggregated:
+        df = pd.DataFrame(aggregated)
+        df["time"] = pd.to_datetime(
+            df["time_interval"], unit="s", utc=True
+        ).dt.tz_convert(cfg.timezone)
         df["hour"] = df["time"].dt.hour
         df["day_of_week"] = df["time"].dt.dayofweek
-        return df
+        df["power"] = df["avg_state"].astype(float)
+        return df[["hour", "day_of_week", "power"]]
     return pd.DataFrame()
