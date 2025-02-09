@@ -5,8 +5,9 @@ from typing import TypedDict
 from astral.sun import sun
 import pandas as pd
 import requests
+import sqlalchemy as sa
 
-from homeassistant.components.recorder import history
+from homeassistant.components.recorder import get_instance, history
 
 from .config import Configuration
 
@@ -78,22 +79,107 @@ def collect_meteo_data(from_date, to_date, skip_night=True):
     return records
 
 
+def get_aggregated_states(
+    hass,
+    start_time: datetime,
+    end_time: datetime,
+    entity_id: str,
+    interval_minutes: int = 15,
+):
+    """
+    Retrieve aggregated states for the given entity between start_time and end_time,
+    grouping records into intervals of 'interval_minutes' minutes.
+
+    This function uses the last_updated_ts column (which is a UNIX timestamp) for grouping.
+    It builds a different SQL expression depending on whether the backend is SQLite or MySQL/MariaDB.
+    """
+    # Get the recorder instance and its engine.
+    recorder_instance = get_instance(hass)
+    engine = recorder_instance.engine
+
+    # Reflect the states table.
+    metadata = sa.MetaData()
+    states_table = sa.Table("states", metadata, autoload_with=engine)
+    states_meta_table = sa.Table("states_meta", metadata, autoload_with=engine)
+    # Get the metadata_id for the given entity_id.
+    metadata_id_query = sa.select(states_meta_table.c.metadata_id).where(
+        states_meta_table.c.entity_id == entity_id
+    )
+
+    with engine.connect() as conn:
+        metadata_id_result = conn.execute(metadata_id_query).scalar()
+
+        if metadata_id_result is None:
+            raise ValueError(f"No metadata found for entity_id: {entity_id}")
+
+        interval_seconds = interval_minutes * 60
+
+        # Build a dialect-aware expression for the time interval based on last_updated_ts.
+        if engine.dialect.name == "sqlite":
+            # For SQLite, last_updated_ts is already a UNIX timestamp.
+            # We cast it to integer, divide by interval_seconds, multiply back,
+            # and then convert it to a datetime string using the 'unixepoch' modifier.
+            time_interval_expr = (
+                (
+                    sa.func.cast(states_table.c.last_updated_ts, sa.Integer)
+                    // interval_seconds
+                )
+                * interval_seconds
+            ).label("time_interval")
+        elif engine.dialect.name in ("mysql", "mariadb"):
+            # For MySQL/MariaDB, use from_unixtime directly.
+            time_interval_expr = (
+                sa.func.floor(states_table.c.last_updated_ts / interval_seconds)
+                * interval_seconds
+            ).label("time_interval")
+        else:
+            raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
+        start_time_ts = start_time.timestamp()
+        end_time_ts = end_time.timestamp()
+
+        query = (
+            sa.select(
+                time_interval_expr,
+                sa.func.avg(sa.cast(states_table.c.state, sa.Float)).label("avg_state"),
+                sa.func.count().label("count_records"),
+            )
+            .where(
+                sa.and_(
+                    states_table.c.metadata_id == metadata_id_result,
+                    states_table.c.last_updated_ts >= start_time_ts,
+                    states_table.c.last_updated_ts < end_time_ts,
+                )
+            )
+            .group_by("time_interval")
+            .order_by("time_interval")
+        )
+
+        result = conn.execute(query)
+        rows = result.fetchall()
+
+    return rows
+
+
 def collect_pv_power_historical_data(
     hass, start_time, end_time
 ) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
     entity_id = cfg.pv_power_entity_id
 
-    states = history.state_changes_during_period(hass, start_time, end_time, entity_id)
-    sensor_states = states.get(entity_id, [])
-    sensor_states = [
-        {"last_updated_timestamp": state.last_updated.timestamp(), "state": state.state}
-        for state in sensor_states
-        if state.state not in ("unavailable", "unknown", "null", None)
-    ]
+    # states = history.state_changes_during_period(hass, start_time, end_time, entity_id)
+    # sensor_states = states.get(entity_id, [])
+    aggregated = get_aggregated_states(
+        hass, start_time, end_time, entity_id, interval_minutes=15
+    )
+
+    # sensor_states = [
+    #    {"last_updated_timestamp": state.last_updated.timestamp(), "state": state.state}
+    #    for state in sensor_states
+    #    if state.state not in ("unavailable", "unknown", "null", None)
+    # ]
 
     return convert_pv_power_data_to_dict(
-        pd.DataFrame(sensor_states), "last_updated_timestamp", "state"
+        pd.DataFrame(aggregated), "time_interval", "avg_state"
     )
 
 
@@ -109,13 +195,14 @@ def convert_pv_power_data_to_dict(
     cfg = Configuration.get_instance()
 
     sensor_data["time"] = (
-        pd.to_datetime(sensor_data[time_column], unit="s", utc=True)
-        .dt.tz_convert(cfg.timezone)
-        .dt.floor("15min")
+        pd.to_datetime(sensor_data[time_column], unit="s", utc=True).dt.tz_convert(
+            cfg.timezone
+        )
+        # .dt.floor("15min")
     )
     sensor_data["power"] = sensor_data[power_column].astype(float)
     sensor_data = sensor_data[["time", "power"]]
-    sensor_data = sensor_data.groupby("time", as_index=False).mean()
+    # sensor_data = sensor_data.groupby("time", as_index=False).mean()
     sensor_data = sensor_data[sensor_data["power"] > 0]
     return sensor_data.to_dict(orient="records")
 
