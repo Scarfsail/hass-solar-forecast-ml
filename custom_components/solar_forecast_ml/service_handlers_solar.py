@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from homeassistant.core import HomeAssistant, ServiceCall
 
 # Import model functions from model.py
-from . import dal, model_solar
+from . import const, dal, model_solar
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -158,13 +158,9 @@ async def handle_predict_service(call: ServiceCall):
                 if hasattr(time_val, "isoformat")
                 else str(time_val)
             )
-            result.append({"time": time_str, "predicted_power": pred})
+            result.append({"time": time_str, "power": pred})
         # Update a sensor with the latest prediction and attach full prediction details as attributes
-        hass.states.async_set(
-            "sensor.solar_panel_forecast",
-            predictions[-1] if predictions else 0,
-            {"predictions": result},
-        )
+        hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
 
         # return {"predictions": result}
     except Exception as e:

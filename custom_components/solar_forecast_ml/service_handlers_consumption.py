@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import ServiceCall
 
-from . import dal, model_consumption
+from . import const, dal, model_consumption
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,18 +92,12 @@ async def handle_predict_service(call: ServiceCall):
 
         # Combine timestamps with predictions
         predictions_with_time = [
-            {"timestamp": ts, **pred} for ts, pred in zip(timestamps, predictions)
+            {"time": ts, **pred} for ts, pred in zip(timestamps, predictions)
         ]
 
         # Update the sensor state with the full prediction data
-        hass.states.async_set(
-            "sensor.house_consumption_prediction",
-            predictions[-1]["median"],  # Last prediction as the current state
-            {
-                "predictions": predictions_with_time,
-                "from_date": from_date.isoformat(),
-                "to_date": to_date.isoformat(),
-            },
+        hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(
+            predictions_with_time
         )
     except Exception as e:
         _LOGGER.error("Error predicting consumption: %s", e)

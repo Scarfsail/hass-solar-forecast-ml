@@ -34,6 +34,11 @@ async def async_setup_entry(hass: HomeAssistant, entry):
     Configuration.get_instance().set_config(config, hass)
     register_services(hass)
 
+    # Forward setup for the sensor platform
+    await hass.config_entries.async_forward_entry_setups(
+        entry,
+        ["sensor"],
+    )
     _LOGGER.info("Solar Forecast ML integration has been set up")
     return True
 
