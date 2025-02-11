@@ -41,8 +41,8 @@ def register_services(hass: HomeAssistant):
         service_handlers_solar.handle_predict_service,
         schema=vol.Schema(
             {
-                vol.Required("from"): cv.datetime,
-                vol.Required("to"): cv.datetime,
+                vol.Required("days_back"): cv.positive_int,
+                vol.Required("days_forward"): cv.positive_int,
             }
         ),
         # supports_response=SupportsResponse.ONLY,
@@ -75,8 +75,8 @@ def register_services(hass: HomeAssistant):
         service_handlers_consumption.handle_predict_service,
         schema=vol.Schema(
             {
-                vol.Required("from"): cv.datetime,
-                vol.Required("to"): cv.datetime,
+                vol.Required("days_back"): cv.positive_int,
+                vol.Required("days_forward"): cv.positive_int,
             }
         ),
         # supports_response=SupportsResponse.ONLY,

@@ -42,20 +42,26 @@ solar_predict:
   name: Predict Solar Power
   description: Predict solar power output for a given time period
   fields:
-    from:
-      name: From
-      description: Start datetime for prediction period
+    days_back:
+      name: Days Back
+      description: Days back for prediction period
       required: true
-      example: "2024-02-01 00:00:00"
+      default: 3
+      example: 3
       selector:
-        datetime: {}
-    to:
-      name: To
-      description: End datetime for prediction period
+        number:
+          min: 0
+          mode: box
+    days_forward:
+      name: Days Forward
+      description: Days forward for prediction period
       required: true
-      example: "2024-02-02 00:00:00"
+      default: 7
+      example: 7
       selector:
-        datetime: {}
+        number:
+          min: 0
+          mode: box
 
 
 consumption_train_from_history:
@@ -102,17 +108,23 @@ consumption_predict:
   name: Predict Power Consumption
   description: Predict power consumption for a given time period
   fields:
-    from:
-      name: From
-      description: Start datetime for prediction period
+    days_back:
+      name: Days Back
+      description: Days back for prediction period
       required: true
-      example: "2024-02-01 00:00:00"
+      default: 3
+      example: 3
       selector:
-        datetime: {}
-    to:
-      name: To
-      description: End datetime for prediction period
+        number:
+          min: 0
+          mode: box
+    days_forward:
+      name: Days Forward
+      description: Days forward for prediction period
       required: true
-      example: "2024-02-02 00:00:00"
+      default: 7
+      example: 7
       selector:
-        datetime: {}
+        number:
+          min: 0
+          mode: box

@@ -45,11 +45,14 @@ async def handle_train_from_csv_service(call: ServiceCall):
 async def handle_predict_service(call: ServiceCall):
     """Service handler to predict energy consumption for a given date range."""
     hass = call.hass
-    from_date = call.data.get("from")
-    to_date = call.data.get("to")
-    if not from_date or not to_date:
-        _LOGGER.error("Both from_date and to_date must be provided")
-        return
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    from_date = now - timedelta(days=call.data.get("days_back", 0))
+    to_date = (
+        now
+        + timedelta(days=call.data.get("days_forward", 1) + 1)
+        - timedelta(seconds=1)
+    )
 
     days_diff = (to_date - from_date).days + 1
     if days_diff < 1:

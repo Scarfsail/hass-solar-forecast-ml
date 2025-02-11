@@ -111,13 +111,16 @@ async def handle_predict_service(call: ServiceCall):
     """Handle the solar forecast prediction service call."""
     cfg = Configuration.get_instance()
     hass = call.hass
-    from_dt = call.data.get("from")
-    to_dt = call.data.get("to")
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    from_dt = now - timedelta(days=call.data.get("days_back", 0))
+    to_dt = (
+        now
+        + timedelta(days=call.data.get("days_forward", 1) + 1)
+        - timedelta(seconds=1)
+    )
 
     _LOGGER.info("Predicting power from %s to %s", from_dt, to_dt)
-    if not from_dt or not to_dt:
-        _LOGGER.error("Missing 'from' or 'to' in forecast service call.")
-        return
 
     # If the provided datetimes are naive, assign the Europe/Prague timezone.
     if from_dt.tzinfo is None:
