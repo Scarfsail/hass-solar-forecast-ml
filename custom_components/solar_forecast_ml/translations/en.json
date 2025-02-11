@@ -9,7 +9,8 @@
                     "longitude": "Longitude",
                     "timezone": "Timezone",
                     "pv_power_entity_id": "PV Power Sensor",
-                    "CONF_POWER_CONSUMPTION_ENTITY": "Power Consumption Sensor"
+                    "power_consumption_entity_id": "Power Consumption Sensor",
+                    "pv_batt_capacity_entity_id": "PV Battery Capacity Sensor"
                 }
             }
         },

@@ -6,6 +6,7 @@ from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_BATT_CAPACITY_ENTITY,
     CONF_POWER_CONSUMPTION_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_TIMEZONE,
@@ -23,6 +24,7 @@ class Configuration:
         self.pv_power_entity_id = None
         self.location = None
         self.power_consumption_entity_id = None
+        self.pv_batt_capacity_entity_id = None
         self.storage_dir = None
 
     @classmethod
@@ -38,6 +40,7 @@ class Configuration:
         self.timezone = config.get(CONF_TIMEZONE)
         self.pv_power_entity_id = config.get(CONF_PV_POWER_ENTITY)
         self.power_consumption_entity_id = config.get(CONF_POWER_CONSUMPTION_ENTITY)
+        self.pv_batt_capacity_entity_id = config.get(CONF_BATT_CAPACITY_ENTITY)
         self.location = LocationInfo(
             "Location", "Country", self.timezone, self.latitude, self.longitude
         )
