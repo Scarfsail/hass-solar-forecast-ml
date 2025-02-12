@@ -153,7 +153,7 @@ def forecast_grid(hass: HomeAssistant, days: int):
             if solar_power > cons["min"] and float(batt["max"]) >= batt_max_threshold:
                 grid_min = solar_power - cons["min"]
             elif solar_power < cons["min"] and float(batt["max"]) <= batt_min_threshold:
-                grid_min = cons["min"] - solar_power
+                grid_min = -(cons["min"] - solar_power)
 
         # Scenario "med": using consumption forecast "med" and battery forecast "med"
         grid_med = 0.0
@@ -161,7 +161,7 @@ def forecast_grid(hass: HomeAssistant, days: int):
             if solar_power > cons["med"] and float(batt["med"]) >= batt_max_threshold:
                 grid_med = solar_power - cons["med"]
             elif solar_power < cons["med"] and float(batt["med"]) <= batt_min_threshold:
-                grid_med = cons["med"] - solar_power
+                grid_med = -(cons["med"] - solar_power)
 
         # Scenario "max": using consumption forecast "min" (best-case consumption) and battery forecast "max"
         grid_max = 0.0
@@ -169,7 +169,7 @@ def forecast_grid(hass: HomeAssistant, days: int):
             if solar_power > cons["max"] and float(batt["min"]) >= batt_max_threshold:
                 grid_max = solar_power - cons["max"]
             elif solar_power < cons["max"] and float(batt["min"]) <= batt_min_threshold:
-                grid_max = cons["max"] - solar_power
+                grid_max = -(cons["max"] - solar_power)
 
         grid_forecast.append(
             {
