@@ -9,6 +9,7 @@ from . import (
     service_handlers_solar,
     service_handlers_consumption,
     service_handlers_battery,
+    service_handlers_grid,
 )
 
 # Import model functions from model.py
@@ -90,6 +91,17 @@ def register_services(hass: HomeAssistant):
         DOMAIN,
         "battery_predict",
         service_handlers_battery.handle_battery_forecast_service,
+        schema=vol.Schema(
+            {
+                vol.Required("days_forward"): cv.positive_int,
+            }
+        ),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        "grid_predict",
+        service_handlers_grid.handle_grid_forecast_service,
         schema=vol.Schema(
             {
                 vol.Required("days_forward"): cv.positive_int,

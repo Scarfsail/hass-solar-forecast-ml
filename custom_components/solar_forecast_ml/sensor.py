@@ -16,6 +16,7 @@ async def async_setup_entry(
 ):
     """Set up the Solar Forecast ML sensor platform."""
     _LOGGER.debug("Setting up Solar Forecast ML sensor platform")
+
     pv_power_forecast = ForecastSensor("solar_panels_forecast", "Solar Panels Forecast")
 
     power_consumption_forecast = ForecastSensor(
@@ -24,6 +25,8 @@ async def async_setup_entry(
     battery_capacity_forecast = ForecastSensor(
         "pv_battery_capacity_forecast", "Battery Capacity Forecast"
     )
+
+    grid_forecast = ForecastSensor("pv_grid_forecast", "Grid export / import Forecast")
 
     hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_PV_POWER_FORECAST] = (
         pv_power_forecast
@@ -36,8 +39,15 @@ async def async_setup_entry(
         battery_capacity_forecast
     )
 
+    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_GRID_FORECAST] = grid_forecast
+
     async_add_entities(
-        [pv_power_forecast, power_consumption_forecast, battery_capacity_forecast]
+        [
+            pv_power_forecast,
+            power_consumption_forecast,
+            battery_capacity_forecast,
+            grid_forecast,
+        ]
     )
 
     return True

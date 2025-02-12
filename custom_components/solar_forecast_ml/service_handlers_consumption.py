@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import ServiceCall
 
-from . import dal, model_consumption, const
+from . import dal, forecast_consumption, const
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def handle_train_from_history_service(call: ServiceCall):
 
         def train():
             df = dal.collect_consumption_data(hass, start_time, end_time)
-            return model_consumption.train_consumption_model(df)
+            return forecast_consumption.train_consumption_model(df)
 
         await hass.async_add_executor_job(train)
         _LOGGER.info("Consumption model trained successfully.")
@@ -76,8 +76,8 @@ async def handle_predict_service(call: ServiceCall):
             current_date += timedelta(days=1)
 
         def predict():
-            models, scaler = model_consumption.load_consumption_models()
-            return model_consumption.predict_consumption(models, scaler, input_data)
+            models, scaler = forecast_consumption.load_consumption_models()
+            return forecast_consumption.predict_consumption(models, scaler, input_data)
 
         predictions = await hass.async_add_executor_job(predict)
         _LOGGER.info("Generated %d hourly predictions", len(predictions))

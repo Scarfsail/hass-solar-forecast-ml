@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from homeassistant.core import HomeAssistant, ServiceCall
 
 # Import model functions from model.py
-from . import const, dal, model_solar
+from . import const, dal, forecast_solar
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ async def solar_train_model(
         return
 
     def train():
-        return model_solar.train_model(
+        return forecast_solar.train_model(
             data_df, cfg.storage_path(MODEL_PATH), cfg.storage_path(SCALER_PATH)
         )
 
@@ -139,7 +139,7 @@ async def handle_predict_service(call: ServiceCall):
 
         # Load the trained model and scaler
         def load():
-            return model_solar.load_model_and_scaler(
+            return forecast_solar.load_model_and_scaler(
                 cfg.storage_path(MODEL_PATH), cfg.storage_path(SCALER_PATH)
             )
 
@@ -147,7 +147,7 @@ async def handle_predict_service(call: ServiceCall):
 
         # Run predictions for each 15-minute record
         def predict():
-            return model_solar.predict_power(model_obj, scaler, forecast_data)
+            return forecast_solar.predict_power(model_obj, scaler, forecast_data)
 
         predictions = await hass.async_add_executor_job(predict)
         _LOGGER.info("Prediction done with %s predictions", len(predictions))

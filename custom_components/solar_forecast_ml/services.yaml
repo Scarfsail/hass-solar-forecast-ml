@@ -143,3 +143,18 @@ battery_predict:
         number:
           min: 0
           mode: box
+
+grid_predict:
+  name: Predict Grid export/import
+  description: Predict grid export/import for a given days ahead
+  fields:
+    days_forward:
+      name: Days Forward
+      description: Days forward for prediction period
+      required: true
+      default: 7
+      example: 7
+      selector:
+        number:
+          min: 0
+          mode: box
