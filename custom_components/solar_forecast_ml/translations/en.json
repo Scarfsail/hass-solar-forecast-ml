@@ -10,7 +10,10 @@
                     "timezone": "Timezone",
                     "pv_power_entity_id": "PV Power Sensor",
                     "power_consumption_entity_id": "Power Consumption Sensor",
-                    "pv_batt_capacity_entity_id": "PV Battery Capacity Sensor"
+                    "pv_batt_capacity_entity_id": "PV Battery Capacity Sensor",
+                    "pv_batt_max_energy_entity_id": "PV Battery Max Energy Sensor",
+                    "pv_batt_min_soc_entity_id": "PV Battery Min SOC Sensor",
+                    "pv_batt_max_soc_entity_id": "PV Battery Max SOC Sensor"
                 }
             }
         },

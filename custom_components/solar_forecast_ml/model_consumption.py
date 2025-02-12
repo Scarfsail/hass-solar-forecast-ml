@@ -85,7 +85,7 @@ def predict_consumption(models, scaler, input_data):
     Returns a list of dictionaries for each input sample with:
       - "hour": input hour,
       - "min": lower quantile prediction,
-      - "median": median prediction,
+      - "med": median prediction,
       - "max": upper quantile prediction.
     """
     df = pd.DataFrame(input_data)
@@ -105,7 +105,7 @@ def predict_consumption(models, scaler, input_data):
             {
                 "hour": input_data[i]["hour"],
                 "min": pred_low[i],
-                "median": pred_med[i],
+                "med": pred_med[i],
                 "max": pred_high[i],
             }
         )

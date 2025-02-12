@@ -5,7 +5,11 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, SupportsResponse
 import homeassistant.helpers.config_validation as cv
 
-from . import service_handlers_solar, service_handlers_consumption
+from . import (
+    service_handlers_solar,
+    service_handlers_consumption,
+    service_handlers_battery,
+)
 
 # Import model functions from model.py
 from .const import DOMAIN  # Define DOMAIN in const.py
@@ -80,4 +84,15 @@ def register_services(hass: HomeAssistant):
             }
         ),
         # supports_response=SupportsResponse.ONLY,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        "battery_predict",
+        service_handlers_battery.handle_battery_forecast_service,
+        schema=vol.Schema(
+            {
+                vol.Required("days_forward"): cv.positive_int,
+            }
+        ),
     )

@@ -17,9 +17,14 @@ async def async_setup_entry(
     """Set up the Solar Forecast ML sensor platform."""
     _LOGGER.debug("Setting up Solar Forecast ML sensor platform")
     pv_power_forecast = ForecastSensor("solar_panels_forecast", "Solar Panels Forecast")
+
     power_consumption_forecast = ForecastSensor(
         "power_consumption_forecast", "Power Consumption Forecast"
     )
+    battery_capacity_forecast = ForecastSensor(
+        "pv_battery_capacity_forecast", "Battery Capacity Forecast"
+    )
+
     hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_PV_POWER_FORECAST] = (
         pv_power_forecast
     )
@@ -27,7 +32,13 @@ async def async_setup_entry(
         power_consumption_forecast
     )
 
-    async_add_entities([pv_power_forecast, power_consumption_forecast])
+    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_PV_BATTERY_FORECAST] = (
+        battery_capacity_forecast
+    )
+
+    async_add_entities(
+        [pv_power_forecast, power_consumption_forecast, battery_capacity_forecast]
+    )
 
     return True
 
@@ -78,6 +89,9 @@ class ForecastSensor(SensorEntity, RestoreEntity):
         self._state = datetime.now()
         self._attributes = {"forecast": forecast}
         self.async_write_ha_state()
+
+    def get_forecast(self):
+        return self._attributes["forecast"]
 
     async def async_added_to_hass(self):
         """Restore state when the entity is added to hass."""

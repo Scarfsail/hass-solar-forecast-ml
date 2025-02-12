@@ -7,6 +7,9 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_BATT_CAPACITY_ENTITY,
+    CONF_BATT_MAX_SOC_ENTITY,
+    CONF_BATT_MIN_SOC_ENTITY,
+    CONF_BATT_MAX_ENERGY_ENTITY,
     CONF_POWER_CONSUMPTION_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_TIMEZONE,
@@ -25,6 +28,9 @@ class Configuration:
         self.location = None
         self.power_consumption_entity_id = None
         self.pv_batt_capacity_entity_id = None
+        self.pv_batt_max_energy_entity_id = None
+        self.pv_batt_min_soc = None
+        self.pv_batt_max_soc = None
         self.storage_dir = None
 
     @classmethod
@@ -41,6 +47,9 @@ class Configuration:
         self.pv_power_entity_id = config.get(CONF_PV_POWER_ENTITY)
         self.power_consumption_entity_id = config.get(CONF_POWER_CONSUMPTION_ENTITY)
         self.pv_batt_capacity_entity_id = config.get(CONF_BATT_CAPACITY_ENTITY)
+        self.pv_batt_max_energy_entity_id = config.get(CONF_BATT_MAX_ENERGY_ENTITY)
+        self.pv_batt_min_soc = config.get(CONF_BATT_MIN_SOC_ENTITY, 10)
+        self.pv_batt_max_soc = config.get(CONF_BATT_MAX_SOC_ENTITY, 100)
         self.location = LocationInfo(
             "Location", "Country", self.timezone, self.latitude, self.longitude
         )

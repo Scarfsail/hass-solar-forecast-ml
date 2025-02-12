@@ -128,3 +128,18 @@ consumption_predict:
         number:
           min: 0
           mode: box
+
+battery_predict:
+  name: Predict Battery Capacity
+  description: Predict battery capacity for a given days ahead
+  fields:
+    days_forward:
+      name: Days Forward
+      description: Days forward for prediction period
+      required: true
+      default: 7
+      example: 7
+      selector:
+        number:
+          min: 0
+          mode: box
