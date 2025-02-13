@@ -7,6 +7,7 @@ CONF_BATT_CAPACITY_ENTITY = "pv_batt_capacity_entity_id"
 CONF_BATT_MAX_ENERGY_ENTITY = "pv_batt_max_energy_entity_id"
 CONF_BATT_MIN_SOC_ENTITY = "pv_batt_min_soc_entity_id"
 CONF_BATT_MAX_SOC_ENTITY = "pv_batt_max_soc_entity_id"
+CONF_BATT_MAX_POWER = "pv_batt_max_power"
 CONF_TIMEZONE = "time_zone"
 
 SENSOR_PV_POWER_FORECAST = "pv_power_forecast"

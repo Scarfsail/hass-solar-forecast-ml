@@ -145,15 +145,37 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
         net_energy_max = solar_power - consumption["min"]
 
         # Update battery energy for each scenario, and clamp between battery limits.
-        new_energy_min = max(
-            batt_min_energy, min(batt_max_energy, current_energy_min + net_energy_min)
-        )
-        new_energy_med = max(
-            batt_min_energy, min(batt_max_energy, current_energy_med + net_energy_med)
-        )
-        new_energy_max = max(
-            batt_min_energy, min(batt_max_energy, current_energy_max + net_energy_max)
-        )
+        # MIN
+        if net_energy_min > 0 and current_energy_min < batt_max_energy:
+            # Battery is not full and there is surplus.
+            # Charge up to pv_batt_max_power, and export the difference.
+            charge = min(net_energy_min, config.pv_batt_max_power)
+            new_energy_min = current_energy_min + charge
+            # export_min = net_energy_min - charge
+        else:
+            # Otherwise, apply the net energy directly.
+            new_energy_min = current_energy_min + net_energy_min
+            # export_min = net_energy_min if net_energy_min > 0 else 0
+
+        # MED
+        if net_energy_med > 0 and current_energy_med < batt_max_energy:
+            charge = min(net_energy_med, config.pv_batt_max_power)
+            new_energy_med = current_energy_med + charge
+            # export_med = net_energy_med - charge
+        else:
+            new_energy_med = current_energy_med + net_energy_med
+            # export_med = net_energy_med if net_energy_med > 0 else 0
+        new_energy_med = max(batt_min_energy, min(batt_max_energy, new_energy_med))
+
+        # MAX
+        if net_energy_max > 0 and current_energy_max < batt_max_energy:
+            charge = min(net_energy_max, config.pv_batt_max_power)
+            new_energy_max = current_energy_max + charge
+            # export_max = net_energy_max - charge
+        else:
+            new_energy_max = current_energy_max + net_energy_max
+            # export_max = net_energy_max if net_energy_max > 0 else 0
+        new_energy_max = max(batt_min_energy, min(batt_max_energy, new_energy_max))
 
         # Convert back to capacity in %.
         cap_min = new_energy_min / max_energy * 100.0
