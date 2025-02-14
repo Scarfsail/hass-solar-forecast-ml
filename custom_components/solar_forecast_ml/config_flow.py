@@ -13,6 +13,7 @@ from .const import (
     CONF_POWER_CONSUMPTION_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_TIMEZONE,
+    CONF_BATT_MAX_POWER,
     DOMAIN,
 )
 
@@ -56,6 +57,10 @@ def get_schema(defaults=None):
                 CONF_BATT_MAX_SOC_ENTITY,
                 default=defaults.get(CONF_BATT_MAX_SOC_ENTITY, ""),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Required(
+                CONF_BATT_MAX_POWER,
+                default=defaults.get(CONF_BATT_MAX_POWER, 10000),
+            ): vol.Coerce(int),
         }
     )
 
