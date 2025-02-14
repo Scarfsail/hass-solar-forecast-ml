@@ -14,6 +14,7 @@ from .const import (
     CONF_PV_POWER_ENTITY,
     CONF_TIMEZONE,
     DOMAIN,
+    CONF_BATT_MAX_POWER,
 )
 
 
@@ -32,6 +33,7 @@ class Configuration:
         self.pv_batt_min_soc = None
         self.pv_batt_max_soc = None
         self.storage_dir = None
+        self.pv_batt_max_power = None
 
     @classmethod
     def get_instance(cls):
@@ -50,6 +52,7 @@ class Configuration:
         self.pv_batt_max_energy_entity_id = config.get(CONF_BATT_MAX_ENERGY_ENTITY)
         self.pv_batt_min_soc = config.get(CONF_BATT_MIN_SOC_ENTITY, 10)
         self.pv_batt_max_soc = config.get(CONF_BATT_MAX_SOC_ENTITY, 100)
+        self.pv_batt_max_power = config.get(CONF_BATT_MAX_POWER, 3000)
         self.location = LocationInfo(
             "Location", "Country", self.timezone, self.latitude, self.longitude
         )
