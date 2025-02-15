@@ -1,11 +1,16 @@
+from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Tuple, Union
+from zoneinfo import ZoneInfo
 
 import joblib
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 
+from homeassistant.core import HomeAssistant
+
+from . import dal
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,7 +77,7 @@ def predict_consumption(
     models: tuple[GradientBoostingRegressor, ...],
     scaler: StandardScaler,
     input_data: list[dict[str, int]],
-) -> list[dict[str, Union[int, float]]]:
+) -> list[dict[str, int | float]]:
     """Predict energy consumption using quantile regression models."""
     df = pd.DataFrame(input_data)
 
@@ -88,3 +93,52 @@ def predict_consumption(
         predictions[name] = model.predict(X_scaled)
 
     return predictions.to_dict("records")
+
+
+async def collect_and_train(
+    hass: HomeAssistant, start_time: datetime, end_time: datetime
+) -> None:
+    """Collect historical data and train the consumption models."""
+    df = await hass.async_add_executor_job(
+        dal.collect_consumption_data, hass, start_time, end_time
+    )
+    if df.empty:
+        raise ValueError("No consumption data collected")
+
+    await hass.async_add_executor_job(train_consumption_model, df)
+
+
+async def generate_predictions(
+    hass: HomeAssistant, from_date: datetime, to_date: datetime, timezone: str
+) -> list[dict[str, str | float]]:
+    """Generate consumption predictions for the specified date range."""
+    tz = ZoneInfo(timezone)
+
+    # Generate input data for each hour in the date range
+    input_data = []
+    current_date = from_date
+    while current_date <= to_date:
+        dt = datetime.combine(current_date, datetime.min.time(), tzinfo=tz)
+        input_data.extend(
+            [{"hour": hour, "day_of_week": dt.weekday()} for hour in range(24)]
+        )
+        current_date += timedelta(days=1)
+
+    # Load models and make predictions
+    models, scaler = await hass.async_add_executor_job(load_consumption_models)
+    predictions = await hass.async_add_executor_job(
+        predict_consumption, models, scaler, input_data
+    )
+
+    # Create timestamps for predictions
+    timestamps = []
+    current_date = from_date
+    while current_date <= to_date:
+        dt = datetime.combine(current_date, datetime.min.time(), tzinfo=tz)
+        timestamps.extend(
+            [(dt + timedelta(hours=hour)).isoformat() for hour in range(24)]
+        )
+        current_date += timedelta(days=1)
+
+    # Combine timestamps with predictions
+    return [{"time": ts, **pred} for ts, pred in zip(timestamps, predictions)]

@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 
 import joblib
@@ -5,6 +6,10 @@ import pandas as pd
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
+from homeassistant.core import HomeAssistant
+
+from . import dal
+from .config import Configuration
 from .dal import METEO_PARAMS
 
 _LOGGER = logging.getLogger(__name__)
@@ -12,6 +17,78 @@ _LOGGER = logging.getLogger(__name__)
 
 # Update feature_cols to use the same parameter names
 feature_cols = METEO_PARAMS  # + ["sun_altitude", "sun_azimuth"]
+
+
+async def collect_and_train(
+    hass: HomeAssistant, start_date: datetime, end_date: datetime
+) -> None:
+    """Collect historical data and train the model."""
+    cfg = Configuration.get_instance()
+
+    # Collect sensor data
+    sensor_records = await hass.async_add_executor_job(
+        dal.collect_pv_power_historical_data, hass, start_date, end_date
+    )
+    if not sensor_records:
+        raise ValueError("No sensor data collected")
+
+    # Collect meteo data
+    meteo_records = await hass.async_add_executor_job(
+        dal.collect_meteo_data, start_date, end_date, False
+    )
+    if not meteo_records:
+        raise ValueError("No meteo data collected")
+
+    # Merge data
+    data_df = dal.merge_meteo_and_pv_power_data(meteo_records, sensor_records)
+    if len(data_df) < 10:
+        raise ValueError("Not enough merged data for training")
+
+    # Save training data
+    csv_filename = cfg.storage_path("solar_training_data.csv")
+    data_df.to_csv(csv_filename, index=False)
+
+    # Train model
+    await hass.async_add_executor_job(
+        train_model,
+        data_df,
+        cfg.storage_path("solar_power_model.pkl"),
+        cfg.storage_path("solar_scaler.pkl"),
+    )
+
+
+async def collect_and_predict(
+    hass: HomeAssistant, from_date: datetime, to_date: datetime
+) -> list[dict[str, str | float]]:
+    """Collect forecast data and make predictions."""
+    cfg = Configuration.get_instance()
+
+    # Get forecast data
+    forecast_data = await hass.async_add_executor_job(
+        dal.collect_meteo_data, from_date, to_date, True
+    )
+    if not forecast_data:
+        raise ValueError("No forecast data collected")
+
+    # Load model and make predictions
+    model, scaler = await hass.async_add_executor_job(
+        load_model_and_scaler,
+        cfg.storage_path("solar_power_model.pkl"),
+        cfg.storage_path("solar_scaler.pkl"),
+    )
+
+    predictions = predict_power(model, scaler, forecast_data)
+
+    # Format results
+    return [
+        {
+            "time": rec["time"].isoformat()
+            if hasattr(rec["time"], "isoformat")
+            else str(rec["time"]),
+            "power": pred,
+        }
+        for rec, pred in zip(forecast_data, predictions)
+    ]
 
 
 def train_model(data_df, model_path, scaler_path):
