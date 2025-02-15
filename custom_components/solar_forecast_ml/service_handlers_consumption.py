@@ -38,10 +38,6 @@ async def handle_train_from_history_service(call: ServiceCall):
         _LOGGER.error("Error training consumption model: %s", e)
 
 
-async def handle_train_from_csv_service(call: ServiceCall):
-    pass
-
-
 async def handle_predict_service(call: ServiceCall):
     """Service handler to predict energy consumption for a given date range."""
     hass = call.hass

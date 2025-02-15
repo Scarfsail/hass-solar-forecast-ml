@@ -33,15 +33,6 @@ def register_services(hass: HomeAssistant):
 
     hass.services.async_register(
         DOMAIN,
-        "solar_train_from_csv",
-        service_handlers_solar.handle_train_from_csv_service,
-        schema=vol.Schema(
-            {vol.Required("csv_file", default="pv_power.csv"): cv.string}
-        ),
-    )
-
-    hass.services.async_register(
-        DOMAIN,
         "solar_predict",
         service_handlers_solar.handle_predict_service,
         schema=vol.Schema(
@@ -62,15 +53,6 @@ def register_services(hass: HomeAssistant):
                 vol.Optional("days_back", default=60): cv.positive_int,
                 vol.Optional("hours_offset", default=1): cv.positive_int,
             }
-        ),
-    )
-
-    hass.services.async_register(
-        DOMAIN,
-        "consumption_train_from_csv",
-        service_handlers_consumption.handle_train_from_csv_service,
-        schema=vol.Schema(
-            {vol.Required("csv_file", default="pv_power.csv"): cv.string}
         ),
     )
 

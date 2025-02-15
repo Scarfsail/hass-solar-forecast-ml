@@ -23,19 +23,6 @@ solar_train_from_history:
           min: 1
           mode: box
 
-solar_train_from_csv:
-  name: Train Solar Power ML Model from CSV
-  description: Train the solar power prediction model from PV Power values stored in CSV
-  fields:
-    csv_file:
-      name: CSV File Name
-      description: File name of the CSV file containing PV Power values
-      required: true
-      default: 'pv_power.csv'
-      example: 'pv_power.csv'
-      selector:
-        text:
-          mode: box
 
 
 solar_predict:
@@ -89,19 +76,6 @@ consumption_train_from_history:
           min: 1
           mode: box
 
-consumption_train_from_csv:
-  name: Train Power Consumption ML Model from CSV
-  description: Train the power consumption prediction model from PV Power values stored in CSV
-  fields:
-    csv_file:
-      name: CSV File Name
-      description: File name of the CSV file containing Power Consumption values
-      required: true
-      default: 'pv_power.csv'
-      example: 'pv_power.csv'
-      selector:
-        text:
-          mode: box
 
 
 consumption_predict:

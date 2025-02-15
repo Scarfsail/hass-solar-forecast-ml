@@ -38,24 +38,6 @@ async def handle_train_from_history_service(call: ServiceCall):
     await solar_train_model(hass, sensor_records)
 
 
-async def handle_train_from_csv_service(call: ServiceCall):
-    """Handle the solar forecast training service call."""
-    _LOGGER.info("Collecting training data ...")
-    cfg = Configuration.get_instance()
-    hass = call.hass
-
-    # Retrieve sensor data for the same period
-    csv_file_name = cfg.storage_path(call.data.get("csv_file"))
-
-    _LOGGER.info("Collecting sensor training data from CSV %s ", csv_file_name)
-
-    sensor_records = await hass.async_add_executor_job(
-        dal.collect_pv_power_csv_data, csv_file_name
-    )
-    _LOGGER.info("Collected %d sensor records", len(sensor_records))
-    await solar_train_model(hass, sensor_records)
-
-
 async def solar_train_model(
     hass: HomeAssistant, sensor_records: list[dal.SensorDataRecord]
 ):
