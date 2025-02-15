@@ -102,8 +102,8 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
             grid_values = {
                 "min": _calculate_grid_exchange(
                     solar_power,
-                    cons["max"],
-                    float(batt["min"]),
+                    cons["min"],
+                    float(batt["max"]),
                     batt_thresholds["min"],
                     batt_thresholds["max"],
                 ),
@@ -116,8 +116,8 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
                 ),
                 "max": _calculate_grid_exchange(
                     solar_power,
-                    cons["min"],
-                    float(batt["max"]),
+                    cons["max"],
+                    float(batt["min"]),
                     batt_thresholds["min"],
                     batt_thresholds["max"],
                 ),
