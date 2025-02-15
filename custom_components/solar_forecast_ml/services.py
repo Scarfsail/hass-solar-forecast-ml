@@ -1,28 +1,30 @@
+from datetime import datetime, timedelta
 import logging
+from zoneinfo import ZoneInfo
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
 
 from . import (
-    service_handlers_solar,
-    service_handlers_consumption,
-    service_handlers_battery,
-    service_handlers_grid,
+    const,
+    forecast_battery,
+    forecast_consumption,
+    forecast_grid,
+    forecast_solar,
 )
-
-# Import model functions from model.py
-from .const import DOMAIN  # Define DOMAIN in const.py
+from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def register_services(hass: HomeAssistant):
+    """Register all forecast services."""
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "solar_train_from_history",
-        service_handlers_solar.handle_train_from_history_service,
+        solar_handle_train_from_history,
         schema=vol.Schema(
             {
                 vol.Optional("days_back", default=60): cv.positive_int,
@@ -32,22 +34,21 @@ def register_services(hass: HomeAssistant):
     )
 
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "solar_predict",
-        service_handlers_solar.handle_predict_service,
+        solar_handle_predict,
         schema=vol.Schema(
             {
                 vol.Required("days_back"): cv.positive_int,
                 vol.Required("days_forward"): cv.positive_int,
             }
         ),
-        # supports_response=SupportsResponse.ONLY,
     )
 
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "consumption_train_from_history",
-        service_handlers_consumption.handle_train_from_history_service,
+        consumption_handle_train_from_history,
         schema=vol.Schema(
             {
                 vol.Optional("days_back", default=60): cv.positive_int,
@@ -57,22 +58,21 @@ def register_services(hass: HomeAssistant):
     )
 
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "consumption_predict",
-        service_handlers_consumption.handle_predict_service,
+        consumption_handle_predict,
         schema=vol.Schema(
             {
                 vol.Required("days_back"): cv.positive_int,
                 vol.Required("days_forward"): cv.positive_int,
             }
         ),
-        # supports_response=SupportsResponse.ONLY,
     )
 
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "battery_predict",
-        service_handlers_battery.handle_battery_forecast_service,
+        battery_handle_predict,
         schema=vol.Schema(
             {
                 vol.Required("days_forward"): cv.positive_int,
@@ -81,12 +81,113 @@ def register_services(hass: HomeAssistant):
     )
 
     hass.services.async_register(
-        DOMAIN,
+        const.DOMAIN,
         "grid_predict",
-        service_handlers_grid.handle_grid_forecast_service,
+        grid_handle_predict,
         schema=vol.Schema(
             {
                 vol.Required("days_forward"): cv.positive_int,
             }
         ),
     )
+
+
+async def solar_handle_train_from_history(call: ServiceCall):
+    """Handle the solar forecast training service call."""
+    hass = call.hass
+    days_back = call.data.get("days_back", 60)
+    hours_offset = call.data.get("hours_offset", 1)
+
+    now = datetime.now()
+    start_date = now - timedelta(days=days_back)
+    end_date = now - timedelta(hours=hours_offset)
+
+    try:
+        await forecast_solar.collect_and_train(hass, start_date, end_date)
+        _LOGGER.info("Solar training completed successfully")
+    except Exception as e:
+        _LOGGER.error("Error during solar training: %s", e)
+
+
+async def solar_handle_predict(call: ServiceCall):
+    """Handle the solar forecast prediction service call."""
+    hass = call.hass
+    cfg = Configuration.get_instance()
+
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    from_dt = now - timedelta(days=call.data.get("days_back", 0))
+    to_dt = (
+        now
+        + timedelta(days=call.data.get("days_forward", 1) + 1)
+        - timedelta(seconds=1)
+    )
+
+    tz = ZoneInfo(cfg.timezone)
+    from_dt = from_dt.replace(tzinfo=tz)
+    to_dt = to_dt.replace(tzinfo=tz)
+
+    try:
+        result = await forecast_solar.collect_and_predict(hass, from_dt, to_dt)
+        hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
+    except Exception as e:
+        _LOGGER.error("Error during solar prediction: %s", e)
+
+
+async def consumption_handle_train_from_history(call: ServiceCall):
+    """Handle the consumption forecast training service call."""
+    hass = call.hass
+    days_back = call.data.get("days_back", 60)
+    hours_offset = call.data.get("hours_offset", 1)
+
+    now = datetime.now()
+    start_time = now - timedelta(days=days_back)
+    end_time = now - timedelta(hours=hours_offset)
+
+    try:
+        await forecast_consumption.collect_and_train(hass, start_time, end_time)
+        _LOGGER.info("Consumption model trained successfully")
+    except Exception as e:
+        _LOGGER.error("Error training consumption model: %s", e)
+
+
+async def consumption_handle_predict(call: ServiceCall):
+    """Handle the consumption forecast prediction service call."""
+    hass = call.hass
+    config = Configuration.get_instance()
+
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    from_date = now - timedelta(days=call.data.get("days_back", 0))
+    to_date = (
+        now
+        + timedelta(days=call.data.get("days_forward", 1) + 1)
+        - timedelta(seconds=1)
+    )
+
+    try:
+        await forecast_consumption.generate_predictions(
+            hass, from_date, to_date, config.timezone
+        )
+    except Exception as e:
+        _LOGGER.error("Error predicting consumption: %s", e)
+
+
+async def battery_handle_predict(call: ServiceCall):
+    """Handle battery capacity prediction service call."""
+    hass = call.hass
+    days = call.data.get("days_forward", 1)
+    try:
+        await hass.async_add_executor_job(
+            forecast_battery.forecast_battery_capacity, hass, days
+        )
+    except Exception as e:
+        _LOGGER.error("Error forecasting battery capacity: %s", e)
+
+
+async def grid_handle_predict(call: ServiceCall):
+    """Handle grid exchange prediction service call."""
+    hass = call.hass
+    days = call.data.get("days_forward", 1)
+    try:
+        await hass.async_add_executor_job(forecast_grid.forecast_grid, hass, days)
+    except Exception as e:
+        _LOGGER.error("Error forecasting grid exchange: %s", e)
