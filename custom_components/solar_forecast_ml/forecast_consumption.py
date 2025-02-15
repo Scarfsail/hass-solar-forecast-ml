@@ -99,19 +99,23 @@ async def collect_and_train(
     hass: HomeAssistant, start_time: datetime, end_time: datetime
 ) -> None:
     """Collect historical data and train the consumption models."""
-    df = await hass.async_add_executor_job(
-        dal.collect_consumption_data, hass, start_time, end_time
-    )
+    _LOGGER.info("Starting consumption data collection and training")
+
+    # Collect and process data
+    df = await dal.collect_consumption_data(hass, start_time, end_time)
     if df.empty:
         raise ValueError("No consumption data collected")
 
+    # Train model in executor
     await hass.async_add_executor_job(train_consumption_model, df)
+    _LOGGER.info("Consumption model training completed")
 
 
 async def generate_predictions(
     hass: HomeAssistant, from_date: datetime, to_date: datetime, timezone: str
 ) -> list[dict[str, str | float]]:
     """Generate consumption predictions for the specified date range."""
+    _LOGGER.info("Generating consumption predictions from %s to %s", from_date, to_date)
     tz = ZoneInfo(timezone)
 
     # Generate input data for each hour in the date range
@@ -143,3 +147,7 @@ async def generate_predictions(
     # Combine timestamps with predictions
     predictions = [{"time": ts, **pred} for ts, pred in zip(timestamps, predictions)]
     hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(predictions)
+    _LOGGER.info(
+        "Consumption predictions completed successfully with %d records",
+        len(predictions),
+    )

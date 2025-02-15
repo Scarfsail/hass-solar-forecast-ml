@@ -23,11 +23,12 @@ async def collect_and_train(
     hass: HomeAssistant, start_date: datetime, end_date: datetime
 ) -> None:
     """Collect historical data and train the model."""
+    _LOGGER.info("Starting solar data collection and training")
     cfg = Configuration.get_instance()
 
     # Collect sensor data
-    sensor_records = await hass.async_add_executor_job(
-        dal.collect_pv_power_historical_data, hass, start_date, end_date
+    sensor_records = await dal.collect_pv_power_historical_data(
+        hass, start_date, end_date
     )
     if not sensor_records:
         raise ValueError("No sensor data collected")
@@ -39,14 +40,18 @@ async def collect_and_train(
     if not meteo_records:
         raise ValueError("No meteo data collected")
 
-    # Merge data
-    data_df = dal.merge_meteo_and_pv_power_data(meteo_records, sensor_records)
+    # Merge data - note the added hass parameter
+    data_df = await dal.merge_meteo_and_pv_power_data(
+        hass, meteo_records, sensor_records
+    )
     if len(data_df) < 10:
         raise ValueError("Not enough merged data for training")
 
     # Save training data
     csv_filename = cfg.storage_path("solar_training_data.csv")
-    data_df.to_csv(csv_filename, index=False)
+    await hass.async_add_executor_job(
+        lambda: data_df.to_csv(path_or_buf=csv_filename, index=False)
+    )
 
     # Train model
     await hass.async_add_executor_job(
@@ -55,12 +60,14 @@ async def collect_and_train(
         cfg.storage_path("solar_power_model.pkl"),
         cfg.storage_path("solar_scaler.pkl"),
     )
+    _LOGGER.info("Solar power model training completed")
 
 
 async def collect_and_predict(
     hass: HomeAssistant, from_date: datetime, to_date: datetime
-) -> list[dict[str, str | float]]:
+):
     """Collect forecast data and make predictions."""
+    _LOGGER.info("Forecasting power consumption from %s to %s", from_date, to_date)
     cfg = Configuration.get_instance()
 
     # Get forecast data
@@ -91,6 +98,9 @@ async def collect_and_predict(
     ]
 
     hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
+    _LOGGER.info(
+        "Power consumption forecast completed successfully with %d records", len(result)
+    )
 
 
 def train_model(data_df, model_path, scaler_path):

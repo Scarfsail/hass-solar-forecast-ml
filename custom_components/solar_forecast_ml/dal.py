@@ -90,90 +90,93 @@ def get_aggregated_states(
     """
     Retrieve aggregated states for the given entity between start_time and end_time,
     grouping records into intervals of 'interval_minutes' minutes.
-
-    This function uses the last_updated_ts column (which is a UNIX timestamp) for grouping.
-    It builds a different SQL expression depending on whether the backend is SQLite or MySQL/MariaDB.
     """
-    # Get the recorder instance and its engine.
-    recorder_instance = get_instance(hass)
-    engine = recorder_instance.engine
 
-    # Reflect the states table.
-    metadata = sa.MetaData()
-    states_table = sa.Table("states", metadata, autoload_with=engine)
-    states_meta_table = sa.Table("states_meta", metadata, autoload_with=engine)
-    # Get the metadata_id for the given entity_id.
-    metadata_id_query = sa.select(states_meta_table.c.metadata_id).where(
-        states_meta_table.c.entity_id == entity_id
-    )
+    def _do_query():
+        # Get the recorder instance and its engine.
+        recorder_instance = get_instance(hass)
+        engine = recorder_instance.engine
 
-    with engine.connect() as conn:
-        metadata_id_result = conn.execute(metadata_id_query).scalar()
+        # Reflect the states table.
+        metadata = sa.MetaData()
+        states_table = sa.Table("states", metadata, autoload_with=engine)
+        states_meta_table = sa.Table("states_meta", metadata, autoload_with=engine)
 
-        if metadata_id_result is None:
-            raise ValueError(f"No metadata found for entity_id: {entity_id}")
-
-        interval_seconds = interval_minutes * 60
-
-        # Build a dialect-aware expression for the time interval based on last_updated_ts.
-        if engine.dialect.name == "sqlite":
-            # For SQLite, last_updated_ts is already a UNIX timestamp.
-            # We cast it to integer, divide by interval_seconds, multiply back,
-            # and then convert it to a datetime string using the 'unixepoch' modifier.
-            time_interval_expr = (
-                (
-                    sa.func.cast(states_table.c.last_updated_ts, sa.Integer)
-                    // interval_seconds
-                )
-                * interval_seconds
-            ).label("time_interval")
-        elif engine.dialect.name in ("mysql", "mariadb"):
-            # For MySQL/MariaDB, use from_unixtime directly.
-            time_interval_expr = (
-                sa.func.floor(states_table.c.last_updated_ts / interval_seconds)
-                * interval_seconds
-            ).label("time_interval")
-        else:
-            raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
-        start_time_ts = start_time.timestamp()
-        end_time_ts = end_time.timestamp()
-
-        query = (
-            sa.select(
-                time_interval_expr,
-                sa.func.avg(sa.cast(states_table.c.state, sa.Float)).label("avg_state"),
-                sa.func.count().label("count_records"),
+        # Get the metadata_id for the given entity_id.
+        with engine.connect() as conn:
+            metadata_id_query = sa.select(states_meta_table.c.metadata_id).where(
+                states_meta_table.c.entity_id == entity_id
             )
-            .where(
-                sa.and_(
-                    states_table.c.state != "unavailable",
-                    states_table.c.metadata_id == metadata_id_result,
-                    states_table.c.last_updated_ts >= start_time_ts,
-                    states_table.c.last_updated_ts < end_time_ts,
+            metadata_id_result = conn.execute(metadata_id_query).scalar()
+
+            if metadata_id_result is None:
+                raise ValueError(f"No metadata found for entity_id: {entity_id}")
+
+            interval_seconds = interval_minutes * 60
+
+            # Build a dialect-aware expression for the time interval
+            if engine.dialect.name == "sqlite":
+                time_interval_expr = (
+                    (
+                        sa.func.cast(states_table.c.last_updated_ts, sa.Integer)
+                        // interval_seconds
+                    )
+                    * interval_seconds
+                ).label("time_interval")
+            elif engine.dialect.name in ("mysql", "mariadb"):
+                time_interval_expr = (
+                    sa.func.floor(states_table.c.last_updated_ts / interval_seconds)
+                    * interval_seconds
+                ).label("time_interval")
+            else:
+                raise RuntimeError(
+                    f"Unsupported database dialect: {engine.dialect.name}"
                 )
+
+            start_time_ts = start_time.timestamp()
+            end_time_ts = end_time.timestamp()
+
+            query = (
+                sa.select(
+                    time_interval_expr,
+                    sa.func.avg(sa.cast(states_table.c.state, sa.Float)).label(
+                        "avg_state"
+                    ),
+                    sa.func.count().label("count_records"),
+                )
+                .where(
+                    sa.and_(
+                        states_table.c.state != "unavailable",
+                        states_table.c.metadata_id == metadata_id_result,
+                        states_table.c.last_updated_ts >= start_time_ts,
+                        states_table.c.last_updated_ts < end_time_ts,
+                    )
+                )
+                .group_by("time_interval")
+                .order_by("time_interval")
             )
-            .group_by("time_interval")
-            .order_by("time_interval")
-        )
 
-        result = conn.execute(query)
-        rows = result.fetchall()
+            result = conn.execute(query)
+            return result.fetchall()
 
-    return rows
+    return get_instance(hass).async_add_executor_job(_do_query)
 
 
-def collect_pv_power_historical_data(
+async def collect_pv_power_historical_data(
     hass, start_time, end_time
 ) -> list[SensorDataRecord]:
     cfg = Configuration.get_instance()
     entity_id = cfg.pv_power_entity_id
 
-    aggregated = get_aggregated_states(
+    aggregated = await get_aggregated_states(
         hass, start_time, end_time, entity_id, interval_minutes=15
     )
 
-    return convert_pv_power_data_to_dict(
-        pd.DataFrame(aggregated), "time_interval", "avg_state"
+    return await convert_pv_power_data_to_dict(
+        hass,
+        pd.DataFrame(aggregated),
+        "time_interval",
+        "avg_state",
     )
 
 
@@ -183,25 +186,38 @@ def collect_pv_power_csv_data(csv_file_name: str) -> list[SensorDataRecord]:
     )
 
 
-def convert_pv_power_data_to_dict(
-    sensor_data: pd.DataFrame, time_column: str, power_column: str
+def convert_pv_power_data_to_dict_sync(
+    sensor_data: pd.DataFrame, time_column: str, power_column: str, timezone: str
 ) -> list[SensorDataRecord]:
-    cfg = Configuration.get_instance()
-
+    """Synchronous version of data conversion."""
     sensor_data["time"] = pd.to_datetime(
         sensor_data[time_column], unit="s", utc=True
-    ).dt.tz_convert(cfg.timezone)
+    ).dt.tz_convert(timezone)
     sensor_data["power"] = sensor_data[power_column].astype(float)
     sensor_data = sensor_data[["time", "power"]]
     sensor_data = sensor_data[sensor_data["power"] > 0]
     return sensor_data.to_dict(orient="records")
 
 
-def merge_meteo_and_pv_power_data(meteo_records, pv_power_records):
-    """
-    Merge meteo and sensor data on the 'time' column.
-    Returns a pandas DataFrame.
-    """
+async def convert_pv_power_data_to_dict(
+    hass,
+    sensor_data: pd.DataFrame,
+    time_column: str,
+    power_column: str,
+) -> list[SensorDataRecord]:
+    """Async wrapper for data conversion."""
+    cfg = Configuration.get_instance()
+    return await hass.async_add_executor_job(
+        convert_pv_power_data_to_dict_sync,
+        sensor_data,
+        time_column,
+        power_column,
+        cfg.timezone,
+    )
+
+
+def merge_meteo_and_pv_power_data_sync(meteo_records, pv_power_records):
+    """Synchronous version of merge operation."""
     df_meteo = pd.DataFrame(meteo_records)
     df_sensor = pd.DataFrame(pv_power_records)
     df = pd.merge(df_meteo, df_sensor, on="time", how="inner")
@@ -209,25 +225,46 @@ def merge_meteo_and_pv_power_data(meteo_records, pv_power_records):
     return df
 
 
-def collect_consumption_data(hass, start_time, end_time):
+async def merge_meteo_and_pv_power_data(hass, meteo_records, pv_power_records):
+    """Async wrapper for merge operation."""
+    return await hass.async_add_executor_job(
+        merge_meteo_and_pv_power_data_sync,
+        meteo_records,
+        pv_power_records,
+    )
+
+
+def process_consumption_data_sync(aggregated_data: list, timezone: str) -> pd.DataFrame:
+    """Process consumption data synchronously."""
+    if not aggregated_data:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(aggregated_data)
+    df["time"] = pd.to_datetime(df["time_interval"], unit="s", utc=True).dt.tz_convert(
+        timezone
+    )
+    df["hour"] = df["time"].dt.hour
+    df["day_of_week"] = df["time"].dt.dayofweek
+    df["power"] = df["avg_state"].astype(float)
+    return df[["hour", "day_of_week", "power"]]
+
+
+async def collect_consumption_data(hass, start_time, end_time):
     """
-    Collect historical energy consumption data from the given sensor between start_time and end_time.
-    Returns a DataFrame with one record per hour (averaged if multiple records exist)
-    and adds features: hour (0-23) and day_of_week (Monday=0, Sunday=6).
+    Collect and process historical energy consumption data.
+    Returns a DataFrame with hour, day_of_week and power columns.
     """
     cfg = Configuration.get_instance()
     sensor_id = cfg.power_consumption_entity_id
-    aggregated = get_aggregated_states(
+
+    # Get aggregated data
+    aggregated = await get_aggregated_states(
         hass, start_time, end_time, sensor_id, interval_minutes=60
     )
 
+    # Process data in executor
     if aggregated:
-        df = pd.DataFrame(aggregated)
-        df["time"] = pd.to_datetime(
-            df["time_interval"], unit="s", utc=True
-        ).dt.tz_convert(cfg.timezone)
-        df["hour"] = df["time"].dt.hour
-        df["day_of_week"] = df["time"].dt.dayofweek
-        df["power"] = df["avg_state"].astype(float)
-        return df[["hour", "day_of_week", "power"]]
+        return await hass.async_add_executor_job(
+            process_consumption_data_sync, aggregated, cfg.timezone
+        )
     return pd.DataFrame()

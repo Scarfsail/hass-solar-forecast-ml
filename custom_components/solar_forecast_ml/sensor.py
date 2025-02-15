@@ -1,12 +1,14 @@
 from datetime import datetime
 import logging
+from zoneinfo import ZoneInfo
 
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.components.sensor import SensorEntity
-from . import const
+
+from . import Configuration, const
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,7 +98,8 @@ class ForecastSensor(SensorEntity, RestoreEntity):
         :param state: The current forecast value (e.g. next interval's prediction)
         :param forecast: A list of forecast values (e.g. a timeline of predictions)
         """
-        self._state = datetime.now()
+        config = Configuration.get_instance()
+        self._state = datetime.now(ZoneInfo(config.timezone))
         self._attributes = {"forecast": forecast}
         self.async_write_ha_state()
 

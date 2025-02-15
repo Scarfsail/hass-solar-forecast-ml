@@ -1,9 +1,11 @@
 import datetime
 import logging
 from zoneinfo import ZoneInfo
+
 import pandas as pd
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import run_callback_threadsafe
 
 from . import const
 from .config import Configuration
@@ -27,6 +29,7 @@ def _calculate_battery_energy(
 
 def forecast_battery_capacity(hass: HomeAssistant, days: int):
     """Forecast the battery capacity (in %) for the next 'days' days."""
+    _LOGGER.info("Forecasting battery capacity for the next %d days", days)
     config = Configuration.get_instance()
 
     # Get battery configuration
@@ -133,7 +136,13 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
         current_energies = new_energies
         sim_time += datetime.timedelta(hours=1)
 
-        # Update the sensor. Assume your sensor is stored in hass.data under the key SENSOR_PV_BATTERY_FORECAST.
-        hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST].update_forecast(
-            forecast_results
-        )  # Pass the JSON forecast data.
+    # Update the sensor. Assume your sensor is stored in hass.data under the key SENSOR_PV_BATTERY_FORECAST.
+    run_callback_threadsafe(
+        hass.loop,
+        hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST].update_forecast,
+        forecast_results,
+    )  # Pass the JSON forecast data.
+    _LOGGER.info(
+        "Battery capacity forecast completed successfully with %d records",
+        len(forecast_results),
+    )

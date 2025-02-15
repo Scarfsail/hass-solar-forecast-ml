@@ -7,7 +7,7 @@ from typing import Dict, List, Union
 import pandas as pd
 
 from homeassistant.core import HomeAssistant
-
+from homeassistant.helpers.event import run_callback_threadsafe
 from .config import Configuration
 from . import const
 
@@ -31,6 +31,7 @@ def _calculate_grid_exchange(
 
 def forecast_grid(hass: HomeAssistant, days: int):
     """Forecast energy export/import to the grid for the next `days` days."""
+    _LOGGER.info("Forecasting grid export/import for the next %d days", days)
     config = Configuration.get_instance()
 
     # Get all required sensors
@@ -131,5 +132,12 @@ def forecast_grid(hass: HomeAssistant, days: int):
             )
 
         sim_time += datetime.timedelta(hours=1)
-
-    hass.data[const.DOMAIN][const.SENSOR_GRID_FORECAST].update_forecast(grid_forecast)
+    run_callback_threadsafe(
+        hass.loop,
+        hass.data[const.DOMAIN][const.SENSOR_GRID_FORECAST].update_forecast,
+        grid_forecast,
+    )
+    _LOGGER.info(
+        "Grid forecast completed successfully with %d records",
+        len(grid_forecast),
+    )
