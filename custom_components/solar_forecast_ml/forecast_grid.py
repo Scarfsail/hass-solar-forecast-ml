@@ -3,6 +3,8 @@
 import datetime
 from zoneinfo import ZoneInfo
 import logging
+from typing import Dict, List, Union
+import pandas as pd
 
 from homeassistant.core import HomeAssistant
 
@@ -12,119 +14,69 @@ from . import const
 _LOGGER = logging.getLogger(__name__)
 
 
-def forecast_grid(hass: HomeAssistant, days: int):
-    """
-    Forecast energy export/import to the grid for the next `days` days.
+def _calculate_grid_exchange(
+    solar_power: float,
+    consumption: float,
+    battery_soc: float,
+    batt_min_threshold: float,
+    batt_max_threshold: float,
+) -> float:
+    """Calculate grid exchange based on power flows and battery state."""
+    if solar_power > consumption and battery_soc >= batt_max_threshold:
+        return solar_power - consumption
+    elif solar_power < consumption and battery_soc <= batt_min_threshold:
+        return -(consumption - solar_power)
+    return 0.0
 
-    Uses:
-      - Solar forecast from hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST]
-        (15-minute intervals; aggregated to hourly averages)
-      - Consumption forecast from hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION]
-        (hourly intervals; with fields "min", "med", "max")
-      - Battery forecast from hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST]
-        (hourly intervals; with fields "min", "med", "max", representing predicted battery capacity in %)
-      - Battery SOC threshold sensors:
-          - Minimum SOC threshold: hass.states.get(config.pv_batt_min_soc).state
-          - Maximum SOC threshold: hass.states.get(config.pv_batt_max_soc).state
 
-    Logic:
-      - For each forecast hour:
-          - Aggregate the solar forecast (average of all 15-min values in that hour).
-          - Use the consumption forecast for that hour.
-          - Use the battery forecast for that hour (for each scenario: min, med, max).
-          - Then:
-             * If (solar > consumption) and battery is at or above the max threshold,
-               grid export = (solar - consumption) (for that scenario).
-             * If (consumption > solar) and battery is at or below the min threshold,
-               grid import = (consumption - solar) (for that scenario).
-             * Otherwise, grid exchange is zero.
-
-    Returns:
-      A list of dictionaries, each with keys "time", "min", "med", "max".
-    """
+def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, float]]]:
+    """Forecast energy export/import to the grid for the next `days` days."""
     config = Configuration.get_instance()
 
-    # Retrieve forecasts from sensors
-    # (Make sure your sensors are already stored in hass.data with proper keys)
-    solar_sensor = hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST]
-    cons_sensor = hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION]
-    batt_sensor = hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST]
+    # Get all required sensors
+    sensors = {
+        "solar": hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST],
+        "consumption": hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION],
+        "battery": hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST],
+    }
 
+    # Get forecasts and convert to DataFrames
     try:
-        solar_forecast = (
-            solar_sensor.get_forecast()
-        )  # List of dicts with "time" and "power" (15-min intervals)
+        solar_df = pd.DataFrame(sensors["solar"].get_forecast())
+        solar_df["time"] = pd.to_datetime(solar_df["time"], format="ISO8601")
+        solar_df["hour"] = solar_df["time"].dt.floor("h")
+        solar_hourly = solar_df.groupby("hour")["power"].mean()
     except Exception as e:
-        _LOGGER.error("Error retrieving solar forecast: %s", e)
-        solar_forecast = []
+        _LOGGER.error("Error processing solar forecast: %s", e)
+        return []
+
     try:
-        cons_forecast = (
-            cons_sensor.get_forecast()
-        )  # List of dicts with "time", "min", "med", "max" (hourly)
+        cons_df = pd.DataFrame(sensors["consumption"].get_forecast())
+        cons_df["time"] = pd.to_datetime(cons_df["time"], format="ISO8601")
+        cons_df.set_index("time", inplace=True)
     except Exception as e:
-        _LOGGER.error("Error retrieving consumption forecast: %s", e)
-        cons_forecast = []
+        _LOGGER.error("Error processing consumption forecast: %s", e)
+        return []
+
     try:
-        batt_forecast = (
-            batt_sensor.get_forecast()
-        )  # List of dicts with "time", "min", "med", "max" (hourly, battery capacity %)
+        batt_df = pd.DataFrame(sensors["battery"].get_forecast())
+        batt_df["time"] = pd.to_datetime(batt_df["time"], format="ISO8601")
+        batt_df.set_index("time", inplace=True)
     except Exception as e:
-        _LOGGER.error("Error retrieving battery forecast: %s", e)
-        batt_forecast = []
+        _LOGGER.error("Error processing battery forecast: %s", e)
+        return []
 
-    # Aggregate solar forecast into hourly averages.
-    solar_by_hour = {}
-    for entry in solar_forecast:
-        try:
-            t = datetime.datetime.fromisoformat(entry["time"])
-            # Round down to the hour.
-            t_hour = t.replace(minute=0, second=0, microsecond=0)
-            solar_by_hour.setdefault(t_hour, []).append(float(entry["power"]))
-        except Exception as err:
-            _LOGGER.error("Error processing solar forecast entry %s: %s", entry, err)
-    solar_hourly = {}
-    for t_hour, values in solar_by_hour.items():
-        solar_hourly[t_hour] = sum(values) / len(values)
-
-    # Convert consumption forecast into a dict keyed by hour.
-    cons_by_hour = {}
-    for entry in cons_forecast:
-        try:
-            t = datetime.datetime.fromisoformat(entry["time"])
-            t_hour = t.replace(minute=0, second=0, microsecond=0)
-            cons_by_hour[t_hour] = {
-                "min": float(entry["min"]),
-                "med": float(entry["med"]),
-                "max": float(entry["max"]),
-            }
-        except Exception as err:
-            _LOGGER.error(
-                "Error processing consumption forecast entry %s: %s", entry, err
-            )
-
-    # Convert battery forecast into a dict keyed by hour.
-    batt_by_hour = {}
-    for entry in batt_forecast:
-        try:
-            t = datetime.datetime.fromisoformat(entry["time"])
-            t_hour = t.replace(minute=0, second=0, microsecond=0)
-            batt_by_hour[t_hour] = entry  # Contains keys "min", "med", "max" (in %)
-        except Exception as err:
-            _LOGGER.error("Error processing battery forecast entry %s: %s", entry, err)
-
-    # Get battery SOC thresholds from sensors (they should be numeric strings)
+    # Get battery thresholds
     try:
-        batt_min_threshold = float(hass.states.get(config.pv_batt_min_soc).state)
-    except Exception as err:
-        _LOGGER.error("Error reading pv_batt_min_soc: %s", err)
-        batt_min_threshold = 10.0
-    try:
-        batt_max_threshold = float(hass.states.get(config.pv_batt_max_soc).state)
-    except Exception as err:
-        _LOGGER.error("Error reading pv_batt_max_soc: %s", err)
-        batt_max_threshold = 90.0
+        batt_thresholds = {
+            "min": float(hass.states.get(config.pv_batt_min_soc).state),
+            "max": float(hass.states.get(config.pv_batt_max_soc).state),
+        }
+    except Exception as e:
+        _LOGGER.error("Error reading battery thresholds: %s", e)
+        batt_thresholds = {"min": 10.0, "max": 90.0}
 
-    # Determine simulation time range: from the next full hour until (days*24) hours ahead.
+    # Setup simulation timeframe
     tz = ZoneInfo(config.timezone)
     now = datetime.datetime.now(tz)
     current_hour = now.replace(minute=0, second=0, microsecond=0)
@@ -137,48 +89,46 @@ def forecast_grid(hass: HomeAssistant, days: int):
 
     grid_forecast = []
 
+    # Simulation loop
     sim_time = start_sim
     while sim_time < end_sim:
-        # Get solar forecast for this hour (Wh)
         solar_power = solar_hourly.get(sim_time, 0.0)
-        # Get consumption forecast for this hour.
-        cons = cons_by_hour.get(sim_time, {"min": 0.0, "med": 0.0, "max": 0.0})
-        # Get battery forecast for this hour.
-        batt = batt_by_hour.get(sim_time, {"min": None, "med": None, "max": None})
 
-        # For each scenario, determine grid exchange.
-        # Scenario "min": using consumption forecast "max" (worst-case) and battery forecast "min"
-        grid_min = 0.0
-        if batt.get("min") is not None:
-            if solar_power > cons["min"] and float(batt["max"]) >= batt_max_threshold:
-                grid_min = solar_power - cons["min"]
-            elif solar_power < cons["min"] and float(batt["max"]) <= batt_min_threshold:
-                grid_min = -(cons["min"] - solar_power)
+        try:
+            cons = cons_df.loc[sim_time]
+            batt = batt_df.loc[sim_time]
 
-        # Scenario "med": using consumption forecast "med" and battery forecast "med"
-        grid_med = 0.0
-        if batt.get("med") is not None:
-            if solar_power > cons["med"] and float(batt["med"]) >= batt_max_threshold:
-                grid_med = solar_power - cons["med"]
-            elif solar_power < cons["med"] and float(batt["med"]) <= batt_min_threshold:
-                grid_med = -(cons["med"] - solar_power)
-
-        # Scenario "max": using consumption forecast "min" (best-case consumption) and battery forecast "max"
-        grid_max = 0.0
-        if batt.get("max") is not None:
-            if solar_power > cons["max"] and float(batt["min"]) >= batt_max_threshold:
-                grid_max = solar_power - cons["max"]
-            elif solar_power < cons["max"] and float(batt["min"]) <= batt_min_threshold:
-                grid_max = -(cons["max"] - solar_power)
-
-        grid_forecast.append(
-            {
-                "time": sim_time.isoformat(),
-                "min": grid_min,
-                "med": grid_med,
-                "max": grid_max,
+            # Calculate grid exchange for each scenario
+            grid_values = {
+                "min": _calculate_grid_exchange(
+                    solar_power,
+                    cons["max"],
+                    float(batt["min"]),
+                    batt_thresholds["min"],
+                    batt_thresholds["max"],
+                ),
+                "med": _calculate_grid_exchange(
+                    solar_power,
+                    cons["med"],
+                    float(batt["med"]),
+                    batt_thresholds["min"],
+                    batt_thresholds["max"],
+                ),
+                "max": _calculate_grid_exchange(
+                    solar_power,
+                    cons["min"],
+                    float(batt["max"]),
+                    batt_thresholds["min"],
+                    batt_thresholds["max"],
+                ),
             }
-        )
+
+            grid_forecast.append({"time": sim_time.isoformat(), **grid_values})
+
+        except KeyError:
+            grid_forecast.append(
+                {"time": sim_time.isoformat(), "min": 0.0, "med": 0.0, "max": 0.0}
+            )
 
         sim_time += datetime.timedelta(hours=1)
 

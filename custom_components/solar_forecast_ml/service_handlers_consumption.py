@@ -26,7 +26,7 @@ async def handle_train_from_history_service(call: ServiceCall):
 
         def train():
             df = dal.collect_consumption_data(hass, start_time, end_time)
-            return forecast_consumption.train_consumption_model(df)
+            forecast_consumption.train_consumption_model(df)
 
         await hass.async_add_executor_job(train)
         _LOGGER.info("Consumption model trained successfully.")

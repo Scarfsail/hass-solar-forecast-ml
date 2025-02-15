@@ -1,5 +1,5 @@
-# model.py
 import logging
+from typing import Dict, List, Tuple, Union
 
 import joblib
 import pandas as pd
@@ -10,103 +10,81 @@ from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
 
-# -----------------------------
-# Existing functions for PV power prediction...
-# def train_model(data_df, model_path, scaler_path):
-#     ... (your existing PV power training code)
-# -----------------------------
-
-# Consumption Model (Quantile Regression) Functions
 CONSUMPTION_MODEL_PREFIX = "consumption_model"
+QUANTILE_MODELS = {
+    "min": {"alpha": 0.05, "suffix": "_low.pkl"},
+    "med": {"alpha": 0.50, "suffix": "_med.pkl"},
+    "max": {"alpha": 0.95, "suffix": "_high.pkl"},
+}
+FEATURE_COLS = ["hour", "day_of_week"]
 
 
 def train_consumption_model(df: pd.DataFrame):
-    """
-    Train three GradientBoostingRegressor models (for quantile regression) to predict energy consumption.
-    We use:
-      - alpha=0.05 for the lower bound (minimal predicted usage),
-      - alpha=0.5 for the median (most probable usage),
-      - alpha=0.95 for the upper bound (maximal predicted usage).
-
-    The features used are: hour and day_of_week.
-    The models and a StandardScaler are saved to disk with filenames prefixed by model_path_prefix.
-    """
+    """Train quantile regression models for energy consumption prediction."""
     cfg = Configuration.get_instance()
+
     if df.empty or len(df) < 10:
         raise ValueError("Not enough data to train consumption model.")
-    feature_cols = ["hour", "day_of_week"]
-    X = df[feature_cols].values
+
+    X = df[FEATURE_COLS].values
     y = df["power"].values
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Train models for three quantiles
-    model_low = GradientBoostingRegressor(
-        loss="quantile", alpha=0.05, n_estimators=100, max_depth=3
-    )
-    model_med = GradientBoostingRegressor(
-        loss="quantile", alpha=0.5, n_estimators=100, max_depth=3
-    )
-    model_high = GradientBoostingRegressor(
-        loss="quantile", alpha=0.95, n_estimators=100, max_depth=3
-    )
+    # Train models for each quantile
+    models = {
+        name: GradientBoostingRegressor(
+            loss="quantile", alpha=params["alpha"], n_estimators=100, max_depth=3
+        ).fit(X_scaled, y)
+        for name, params in QUANTILE_MODELS.items()
+    }
 
-    model_low.fit(X_scaled, y)
-    model_med.fit(X_scaled, y)
-    model_high.fit(X_scaled, y)
-
-    # Save the models and scaler using the given prefix.
-    joblib.dump(model_low, cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_low.pkl"))
-    joblib.dump(model_med, cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_med.pkl"))
-    joblib.dump(model_high, cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_high.pkl"))
-    joblib.dump(scaler, cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_scaler.pkl"))
-
-    return (model_low, model_med, model_high), scaler
+    # Save models and scaler
+    for name, model in models.items():
+        joblib.dump(
+            model,
+            cfg.storage_path(
+                f"{CONSUMPTION_MODEL_PREFIX}{QUANTILE_MODELS[name]['suffix']}"
+            ),
+        )
+    joblib.dump(scaler, cfg.storage_path(f"{CONSUMPTION_MODEL_PREFIX}_scaler.pkl"))
 
 
-def load_consumption_models():
-    """
-    Load the three trained models and the scaler from disk.
-    """
+def load_consumption_models() -> (
+    tuple[tuple[GradientBoostingRegressor, ...], StandardScaler]
+):
+    """Load trained models and scaler from disk."""
     cfg = Configuration.get_instance()
-    model_low = joblib.load(cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_low.pkl"))
-    model_med = joblib.load(cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_med.pkl"))
-    model_high = joblib.load(cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_high.pkl"))
-    scaler = joblib.load(cfg.storage_path(CONSUMPTION_MODEL_PREFIX + "_scaler.pkl"))
-    return (model_low, model_med, model_high), scaler
+
+    models = {
+        name: joblib.load(
+            cfg.storage_path(f"{CONSUMPTION_MODEL_PREFIX}{params['suffix']}")
+        )
+        for name, params in QUANTILE_MODELS.items()
+    }
+
+    scaler = joblib.load(cfg.storage_path(f"{CONSUMPTION_MODEL_PREFIX}_scaler.pkl"))
+    return tuple(models.values()), scaler
 
 
-def predict_consumption(models, scaler, input_data):
-    """
-    Given input_data (a list of dicts with keys 'hour' and 'day_of_week'),
-    predict energy consumption for each input using the three quantile models.
-
-    Returns a list of dictionaries for each input sample with:
-      - "hour": input hour,
-      - "min": lower quantile prediction,
-      - "med": median prediction,
-      - "max": upper quantile prediction.
-    """
+def predict_consumption(
+    models: tuple[GradientBoostingRegressor, ...],
+    scaler: StandardScaler,
+    input_data: list[dict[str, int]],
+) -> list[dict[str, Union[int, float]]]:
+    """Predict energy consumption using quantile regression models."""
     df = pd.DataFrame(input_data)
-    feature_cols = ["hour", "day_of_week"]
-    if not all(col in df.columns for col in feature_cols):
-        raise ValueError("Input data must contain 'hour' and 'day_of_week'")
-    X = df[feature_cols].values
+
+    if not all(col in df.columns for col in FEATURE_COLS):
+        raise ValueError(f"Input data must contain {FEATURE_COLS}")
+
+    X = df[FEATURE_COLS].values
     X_scaled = scaler.transform(X)
 
-    pred_low = models[0].predict(X_scaled)
-    pred_med = models[1].predict(X_scaled)
-    pred_high = models[2].predict(X_scaled)
+    # Make predictions for each quantile
+    predictions = df[["hour"]].copy()
+    for model, name in zip(models, QUANTILE_MODELS.keys()):
+        predictions[name] = model.predict(X_scaled)
 
-    predictions = []
-    for i in range(len(pred_low)):
-        predictions.append(
-            {
-                "hour": input_data[i]["hour"],
-                "min": pred_low[i],
-                "med": pred_med[i],
-                "max": pred_high[i],
-            }
-        )
-    return predictions
+    return predictions.to_dict("records")
