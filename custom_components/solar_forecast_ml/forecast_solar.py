@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 
 from homeassistant.core import HomeAssistant
 
-from . import dal
+from . import const, dal
 from .config import Configuration
 from .dal import METEO_PARAMS
 
@@ -80,7 +80,7 @@ async def collect_and_predict(
     predictions = predict_power(model, scaler, forecast_data)
 
     # Format results
-    return [
+    result = [
         {
             "time": rec["time"].isoformat()
             if hasattr(rec["time"], "isoformat")
@@ -89,6 +89,8 @@ async def collect_and_predict(
         }
         for rec, pred in zip(forecast_data, predictions)
     ]
+
+    hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
 
 
 def train_model(data_df, model_path, scaler_path):

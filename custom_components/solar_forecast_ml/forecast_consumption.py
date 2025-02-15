@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from homeassistant.core import HomeAssistant
 
-from . import dal
+from . import const, dal
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -141,4 +141,5 @@ async def generate_predictions(
         current_date += timedelta(days=1)
 
     # Combine timestamps with predictions
-    return [{"time": ts, **pred} for ts, pred in zip(timestamps, predictions)]
+    predictions = [{"time": ts, **pred} for ts, pred in zip(timestamps, predictions)]
+    hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(predictions)

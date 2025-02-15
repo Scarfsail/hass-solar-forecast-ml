@@ -133,4 +133,7 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
         current_energies = new_energies
         sim_time += datetime.timedelta(hours=1)
 
-    return forecast_results
+        # Update the sensor. Assume your sensor is stored in hass.data under the key SENSOR_PV_BATTERY_FORECAST.
+        hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST].update_forecast(
+            forecast_results
+        )  # Pass the JSON forecast data.

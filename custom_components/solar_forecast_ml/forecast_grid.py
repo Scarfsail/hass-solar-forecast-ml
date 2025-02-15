@@ -29,7 +29,7 @@ def _calculate_grid_exchange(
     return 0.0
 
 
-def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, float]]]:
+def forecast_grid(hass: HomeAssistant, days: int):
     """Forecast energy export/import to the grid for the next `days` days."""
     config = Configuration.get_instance()
 
@@ -48,7 +48,7 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
         solar_hourly = solar_df.groupby("hour")["power"].mean()
     except Exception as e:
         _LOGGER.error("Error processing solar forecast: %s", e)
-        return []
+        return
 
     try:
         cons_df = pd.DataFrame(sensors["consumption"].get_forecast())
@@ -56,7 +56,7 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
         cons_df.set_index("time", inplace=True)
     except Exception as e:
         _LOGGER.error("Error processing consumption forecast: %s", e)
-        return []
+        return
 
     try:
         batt_df = pd.DataFrame(sensors["battery"].get_forecast())
@@ -64,7 +64,7 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
         batt_df.set_index("time", inplace=True)
     except Exception as e:
         _LOGGER.error("Error processing battery forecast: %s", e)
-        return []
+        return
 
     # Get battery thresholds
     try:
@@ -132,4 +132,4 @@ def forecast_grid(hass: HomeAssistant, days: int) -> List[Dict[str, Union[str, f
 
         sim_time += datetime.timedelta(hours=1)
 
-    return grid_forecast
+    hass.data[const.DOMAIN][const.SENSOR_GRID_FORECAST].update_forecast(grid_forecast)

@@ -46,7 +46,6 @@ async def handle_predict_service(call: ServiceCall):
     to_dt = to_dt.replace(tzinfo=tz)
 
     try:
-        result = await forecast_solar.collect_and_predict(hass, from_dt, to_dt)
-        hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
+        await forecast_solar.collect_and_predict(hass, from_dt, to_dt)
     except Exception as e:
         _LOGGER.error("Error during prediction: %s", e)

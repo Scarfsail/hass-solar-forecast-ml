@@ -41,11 +41,9 @@ async def handle_predict_service(call: ServiceCall):
     )
 
     try:
-        predictions = await forecast_consumption.generate_predictions(
+        await forecast_consumption.generate_predictions(
             hass, from_date, to_date, config.timezone
         )
-        hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(
-            predictions
-        )
+
     except Exception as e:
         _LOGGER.error("Error predicting consumption: %s", e)
