@@ -24,6 +24,23 @@ QUANTILE_MODELS = {
 FEATURE_COLS = ["hour", "day_of_week"]
 
 
+def when_model_was_trained() -> datetime:
+    """Return the timestamp when the consumption model was trained."""
+    cfg = Configuration.get_instance()
+    if not is_model_trained():
+        return None
+
+    return datetime.fromtimestamp(
+        min(
+            cfg.storage_path(f"{CONSUMPTION_MODEL_PREFIX}{params['suffix']}")
+            .stat()
+            .st_mtime
+            for params in QUANTILE_MODELS.values()
+        ),
+        tz=ZoneInfo(cfg.timezone),
+    )
+
+
 def is_model_trained() -> bool:
     """Check if the consumption model is trained."""
     cfg = Configuration.get_instance()

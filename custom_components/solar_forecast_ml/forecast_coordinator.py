@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import logging
 from zoneinfo import ZoneInfo
 
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import forecast_battery, forecast_consumption, forecast_grid, forecast_solar
@@ -16,10 +17,9 @@ PREDICT_DAYS_BACK = 3
 class ForecastCoordinator(DataUpdateCoordinator):
     """Coordinator to run periodic prediction and training tasks sequentially for solar_forecast_ml."""
 
-    def __init__(self, hass):
+    def __init__(self, hass: HomeAssistant):
         self.hass = hass
         self.config = Configuration.get_instance()
-        self.last_midnight_run = None  # Ensure midnight tasks run only once per day
         self.first_update = True  # Force full predictions on integration startup
 
         super().__init__(
@@ -39,47 +39,47 @@ class ForecastCoordinator(DataUpdateCoordinator):
         """
 
         now = datetime.now(ZoneInfo(self.config.timezone))
-        tasks = []
+        tasks: list[tuple[str, callable]] = []
 
-        # --- Training Tasks at Midnight (run once per day) ---
-        all_models_trained = (
-            forecast_solar.is_model_trained()
-            and forecast_consumption.is_model_trained()
-        )
+        # --- Training Tasks once per day ---
+        # Check if solar model needs training
+        training_start_date = now - timedelta(days=60)
+        training_end_date = now - timedelta(hours=1)
 
-        if (now.hour == 0 and now.minute == 0) or not all_models_trained:
-            if (
-                self.last_midnight_run is None
-                or self.last_midnight_run.date() != now.date()
-                or not all_models_trained
-            ):
-                self.last_midnight_run = now
-                start_date = now - timedelta(days=60)
-                end_date = now - timedelta(hours=1)
-                tasks.append(
-                    (
-                        "Solar training",
-                        lambda: forecast_solar.collect_and_train(
-                            self.hass, start_date, end_date
-                        ),
-                    )
+        if not forecast_solar.is_model_trained() or (
+            now - forecast_solar.when_model_was_trained()
+        ) > timedelta(hours=24):
+            tasks.append(
+                (
+                    "Solar training",
+                    lambda: forecast_solar.collect_and_train(
+                        self.hass, training_start_date, training_end_date
+                    ),
                 )
-                tasks.append(
-                    (
-                        "Consumption training",
-                        lambda: forecast_consumption.collect_and_train(
-                            self.hass, start_date, end_date
-                        ),
-                    )
+            )
+        if not forecast_consumption.is_model_trained() or (
+            now - forecast_consumption.when_model_was_trained()
+        ) > timedelta(hours=24):
+            tasks.append(
+                (
+                    "Consumption training",
+                    lambda: forecast_consumption.collect_and_train(
+                        self.hass, training_start_date, training_end_date
+                    ),
                 )
+            )
 
         # Define the prediction window used by solar and consumption predictions.
-        dt_start = (
+        prediction_from = (
             now.replace(hour=0, minute=0, second=0, microsecond=0)
             - timedelta(days=PREDICT_DAYS_BACK)
             + timedelta(seconds=1)
         )
-        to_date = dt_start + timedelta(days=PREDICT_DAYS_FORWARD) - timedelta(seconds=1)
+        prediction_to = (
+            prediction_from
+            + timedelta(days=PREDICT_DAYS_FORWARD)
+            - timedelta(seconds=1)
+        )
 
         # --- Prediction Tasks ---
         # On startup or every 15 minutes, run solar and consumption predictions.
@@ -88,7 +88,7 @@ class ForecastCoordinator(DataUpdateCoordinator):
                 (
                     "Solar prediction",
                     lambda: forecast_solar.collect_and_predict(
-                        self.hass, dt_start, to_date
+                        self.hass, prediction_from, prediction_to
                     ),
                 )
             )
@@ -96,7 +96,7 @@ class ForecastCoordinator(DataUpdateCoordinator):
                 (
                     "Consumption prediction",
                     lambda: forecast_consumption.generate_predictions(
-                        self.hass, dt_start, to_date, self.config.timezone
+                        self.hass, prediction_from, prediction_to, self.config.timezone
                     ),
                 )
             )

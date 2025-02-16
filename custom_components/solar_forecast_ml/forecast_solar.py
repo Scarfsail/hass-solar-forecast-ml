@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+from zoneinfo import ZoneInfo
 
 import joblib
 import pandas as pd
@@ -17,6 +18,15 @@ _LOGGER = logging.getLogger(__name__)
 
 # Update feature_cols to use the same parameter names
 feature_cols = METEO_PARAMS  # + ["sun_altitude", "sun_azimuth"]
+
+
+def when_model_was_trained() -> datetime:
+    """Return the timestamp when the solar power model was trained."""
+    cfg = Configuration.get_instance()
+    model_path = cfg.storage_path("solar_power_model.pkl")
+    if not model_path.exists():
+        return None
+    return datetime.fromtimestamp(model_path.stat().st_mtime, tz=ZoneInfo(cfg.timezone))
 
 
 def is_model_trained() -> bool:
