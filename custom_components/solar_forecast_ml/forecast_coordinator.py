@@ -131,4 +131,6 @@ class ForecastCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 _LOGGER.error("Error during %s: %s", task_name, e)
 
-        return {"status": "updated"}
+        self._schedule_refresh()
+
+        return {"status": "updated", "updated_at": now.isoformat()}

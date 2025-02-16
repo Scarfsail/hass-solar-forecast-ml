@@ -43,7 +43,6 @@ async def async_setup_entry(hass: HomeAssistant, entry):
 
     coordinator = ForecastCoordinator(hass)
     await coordinator.async_config_entry_first_refresh()
-    coordinator._schedule_refresh()
     hass.data.setdefault(DOMAIN, {})[const.COORDINATOR] = coordinator
 
     _LOGGER.info("Solar Forecast ML integration has been set up")
