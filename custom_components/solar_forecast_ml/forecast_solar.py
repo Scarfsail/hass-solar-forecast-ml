@@ -19,6 +19,12 @@ _LOGGER = logging.getLogger(__name__)
 feature_cols = METEO_PARAMS  # + ["sun_altitude", "sun_azimuth"]
 
 
+def is_model_trained() -> bool:
+    """Check if the solar power model is trained."""
+    cfg = Configuration.get_instance()
+    return cfg.storage_path("solar_power_model.pkl").exists()
+
+
 async def collect_and_train(
     hass: HomeAssistant, start_date: datetime, end_date: datetime
 ) -> None:

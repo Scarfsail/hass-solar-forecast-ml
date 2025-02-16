@@ -3,9 +3,10 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from . import dal
+from . import const
 from .config import Configuration
 from .const import DOMAIN
+from .forecast_coordinator import ForecastCoordinator
 from .services import register_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,6 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry):
         entry,
         ["sensor"],
     )
+
+    coordinator = ForecastCoordinator(hass)
+    await coordinator.async_config_entry_first_refresh()
+    coordinator._schedule_refresh()
+    hass.data.setdefault(DOMAIN, {})[const.COORDINATOR] = coordinator
+
     _LOGGER.info("Solar Forecast ML integration has been set up")
     return True
 
@@ -47,4 +54,8 @@ async def async_setup_entry(hass: HomeAssistant, entry):
 async def async_unload_entry(hass: HomeAssistant, entry):
     """Unload a config entry."""
     # Remove any services or clean up resources if needed.
+
+    coordinator: ForecastCoordinator = hass.data[DOMAIN].pop(const.COORDINATOR)
+    await coordinator.async_shutdown()
+
     return True

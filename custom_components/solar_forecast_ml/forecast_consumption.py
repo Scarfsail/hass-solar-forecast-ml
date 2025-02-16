@@ -24,6 +24,15 @@ QUANTILE_MODELS = {
 FEATURE_COLS = ["hour", "day_of_week"]
 
 
+def is_model_trained() -> bool:
+    """Check if the consumption model is trained."""
+    cfg = Configuration.get_instance()
+    return all(
+        cfg.storage_path(f"{CONSUMPTION_MODEL_PREFIX}{params['suffix']}").exists()
+        for params in QUANTILE_MODELS.values()
+    )
+
+
 def train_consumption_model(df: pd.DataFrame):
     """Train quantile regression models for energy consumption prediction."""
     cfg = Configuration.get_instance()
