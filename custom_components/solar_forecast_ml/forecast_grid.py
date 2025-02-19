@@ -29,21 +29,20 @@ def _calculate_grid_exchange(
     return 0.0
 
 
-def forecast_grid(hass: HomeAssistant, days: int):
+def forecast_grid(
+    hass: HomeAssistant,
+    days: int,
+    solar_forecast_data,
+    consumption_forecast_data,
+    battery_forecast_data,
+):
     """Forecast energy export/import to the grid for the next `days` days."""
     _LOGGER.info("Forecasting grid export/import for the next %d days", days)
     config = Configuration.get_instance()
 
-    # Get all required sensors
-    sensors = {
-        "solar": hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST],
-        "consumption": hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION],
-        "battery": hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST],
-    }
-
     # Get forecasts and convert to DataFrames
     try:
-        solar_df = pd.DataFrame(sensors["solar"].get_forecast())
+        solar_df = pd.DataFrame(solar_forecast_data)
         solar_df["time"] = pd.to_datetime(solar_df["time"], format="ISO8601")
         solar_df["hour"] = solar_df["time"].dt.floor("h")
         solar_hourly = solar_df.groupby("hour")["power"].mean()
@@ -52,7 +51,7 @@ def forecast_grid(hass: HomeAssistant, days: int):
         return
 
     try:
-        cons_df = pd.DataFrame(sensors["consumption"].get_forecast())
+        cons_df = pd.DataFrame(consumption_forecast_data)
         cons_df["time"] = pd.to_datetime(cons_df["time"], format="ISO8601")
         cons_df.set_index("time", inplace=True)
     except Exception as e:
@@ -60,7 +59,7 @@ def forecast_grid(hass: HomeAssistant, days: int):
         return
 
     try:
-        batt_df = pd.DataFrame(sensors["battery"].get_forecast())
+        batt_df = pd.DataFrame(battery_forecast_data)
         batt_df["time"] = pd.to_datetime(batt_df["time"], format="ISO8601")
         batt_df.set_index("time", inplace=True)
     except Exception as e:
@@ -132,12 +131,13 @@ def forecast_grid(hass: HomeAssistant, days: int):
             )
 
         sim_time += datetime.timedelta(hours=1)
-    run_callback_threadsafe(
-        hass.loop,
-        hass.data[const.DOMAIN][const.SENSOR_GRID_FORECAST].update_forecast,
-        grid_forecast,
-    )
+    # run_callback_threadsafe(
+    #    hass.loop,
+    #    hass.data[const.DOMAIN][const.SENSOR_GRID_FORECAST].update_forecast,
+    #    grid_forecast,
+    # )
     _LOGGER.info(
         "Grid forecast completed successfully with %d records",
         len(grid_forecast),
     )
+    return grid_forecast

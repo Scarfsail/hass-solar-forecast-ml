@@ -4,11 +4,13 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import Configuration, const
+from .forecast_coordinator import ForecastCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,47 +20,33 @@ async def async_setup_entry(
 ):
     """Set up the Solar Forecast ML sensor platform."""
     _LOGGER.debug("Setting up Solar Forecast ML sensor platform")
+    coordinator: ForecastCoordinator = hass.data[const.DOMAIN][const.COORDINATOR]
 
-    pv_power_forecast = ForecastSensor("solar_panels_forecast", "Solar Panels Forecast")
+    forecast_sensors = [
+        ForecastSensor(
+            coordinator, const.SENSOR_PV_POWER_FORECAST, "Solar Panels Forecast"
+        ),
+        ForecastSensor(
+            coordinator, const.SENSOR_PV_POWER_CONSUMPTION, "Power Consumption Forecast"
+        ),
+        ForecastSensor(
+            coordinator, const.SENSOR_PV_BATTERY_FORECAST, "Battery Capacity Forecast"
+        ),
+        ForecastSensor(
+            coordinator, const.SENSOR_PV_GRID_FORECAST, "Grid export / import Forecast"
+        ),
+    ]
 
-    power_consumption_forecast = ForecastSensor(
-        "power_consumption_forecast", "Power Consumption Forecast"
-    )
-    battery_capacity_forecast = ForecastSensor(
-        "pv_battery_capacity_forecast", "Battery Capacity Forecast"
-    )
-
-    grid_forecast = ForecastSensor("pv_grid_forecast", "Grid export / import Forecast")
-
-    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_PV_POWER_FORECAST] = (
-        pv_power_forecast
-    )
-    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_POWER_CONSUMPTION] = (
-        power_consumption_forecast
-    )
-
-    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_PV_BATTERY_FORECAST] = (
-        battery_capacity_forecast
-    )
-
-    hass.data.setdefault(const.DOMAIN, {})[const.SENSOR_GRID_FORECAST] = grid_forecast
-
-    async_add_entities(
-        [
-            pv_power_forecast,
-            power_consumption_forecast,
-            battery_capacity_forecast,
-            grid_forecast,
-        ]
-    )
+    async_add_entities(forecast_sensors)
 
     return True
 
 
-class ForecastSensor(SensorEntity, RestoreEntity):
+class ForecastSensor(CoordinatorEntity[ForecastCoordinator], SensorEntity):
     """Representation of a solar panel forecast sensor."""
 
-    def __init__(self, id: str, name: str):
+    def __init__(self, coordinator: ForecastCoordinator, id: str, name: str):
+        super().__init__(coordinator)
         self._state = None
         self._attributes = {"forecast": []}
         self._name = name
@@ -103,15 +91,20 @@ class ForecastSensor(SensorEntity, RestoreEntity):
         self._attributes = {"forecast": forecast}
         self.async_write_ha_state()
 
-    def get_forecast(self):
-        return self._attributes["forecast"]
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._handle_update()
+        super()._handle_coordinator_update()
 
     async def async_added_to_hass(self):
         """Restore state when the entity is added to hass."""
         await super().async_added_to_hass()
-        # Retrieve the previous state
+        self._handle_update()
 
-        old_state = await self.async_get_last_state()
-        if old_state is not None:
-            self._attributes = old_state.attributes
-            self._state = old_state.state
+    def _handle_update(self):
+        forecasts = self.coordinator.data["forecasts"]
+        if self._id in forecasts:
+            forecast_data = forecasts[self._id]
+            self._state = 0
+            self._attributes = forecast_data

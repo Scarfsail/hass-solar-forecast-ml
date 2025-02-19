@@ -113,10 +113,11 @@ async def collect_and_predict(
         for rec, pred in zip(forecast_data, predictions)
     ]
 
-    hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
+    # hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].update_forecast(result)
     _LOGGER.info(
         "Power consumption forecast completed successfully with %d records", len(result)
     )
+    return result
 
 
 def train_model(data_df, model_path, scaler_path):

@@ -27,7 +27,9 @@ def _calculate_battery_energy(
     return max(batt_min_energy, min(batt_max_energy, new_energy))
 
 
-def forecast_battery_capacity(hass: HomeAssistant, days: int):
+def forecast_battery_capacity(
+    hass: HomeAssistant, days: int, solar_forecast_data, consumption_forecast_data
+):
     """Forecast the battery capacity (in %) for the next 'days' days."""
     _LOGGER.info("Forecasting battery capacity for the next %d days", days)
     config = Configuration.get_instance()
@@ -45,9 +47,7 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
     )
 
     # Get solar forecast and convert to pandas DataFrame
-    solar_forecast = pd.DataFrame(
-        hass.data[const.DOMAIN][const.SENSOR_PV_POWER_FORECAST].get_forecast()
-    )
+    solar_forecast = pd.DataFrame(solar_forecast_data)
     solar_forecast["time"] = pd.to_datetime(solar_forecast["time"])
     solar_forecast["hour"] = solar_forecast["time"].dt.floor(
         "h"
@@ -57,9 +57,7 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
     solar_hourly = solar_forecast.groupby("hour")["power"].mean().to_dict()
 
     # Get consumption forecast and convert to pandas DataFrame
-    cons_forecast = pd.DataFrame(
-        hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].get_forecast()
-    )
+    cons_forecast = pd.DataFrame(consumption_forecast_data)
     cons_forecast["time"] = pd.to_datetime(cons_forecast["time"])
     cons_forecast.set_index("time", inplace=True)
 
@@ -137,12 +135,13 @@ def forecast_battery_capacity(hass: HomeAssistant, days: int):
         sim_time += datetime.timedelta(hours=1)
 
     # Update the sensor. Assume your sensor is stored in hass.data under the key SENSOR_PV_BATTERY_FORECAST.
-    run_callback_threadsafe(
-        hass.loop,
-        hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST].update_forecast,
-        forecast_results,
-    )  # Pass the JSON forecast data.
+    # run_callback_threadsafe(
+    #    hass.loop,
+    #    hass.data[const.DOMAIN][const.SENSOR_PV_BATTERY_FORECAST].update_forecast,
+    #    forecast_results,
+    # )  # Pass the JSON forecast data.
     _LOGGER.info(
         "Battery capacity forecast completed successfully with %d records",
         len(forecast_results),
     )
+    return forecast_results

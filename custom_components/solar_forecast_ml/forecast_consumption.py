@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import logging
-from typing import Dict, List, Tuple, Union
 from zoneinfo import ZoneInfo
 
 import joblib
@@ -138,11 +137,13 @@ async def collect_and_train(
 
 
 async def generate_predictions(
-    hass: HomeAssistant, from_date: datetime, to_date: datetime, timezone: str
+    hass: HomeAssistant, from_date: datetime, to_date: datetime
 ) -> list[dict[str, str | float]]:
     """Generate consumption predictions for the specified date range."""
     _LOGGER.info("Generating consumption predictions from %s to %s", from_date, to_date)
-    tz = ZoneInfo(timezone)
+    cfg = Configuration.get_instance()
+
+    tz = ZoneInfo(cfg.timezone)
 
     # Generate input data for each hour in the date range
     input_data = []
@@ -172,8 +173,9 @@ async def generate_predictions(
 
     # Combine timestamps with predictions
     predictions = [{"time": ts, **pred} for ts, pred in zip(timestamps, predictions)]
-    hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(predictions)
+    # hass.data[const.DOMAIN][const.SENSOR_POWER_CONSUMPTION].update_forecast(predictions)
     _LOGGER.info(
         "Consumption predictions completed successfully with %d records",
         len(predictions),
     )
+    return predictions
