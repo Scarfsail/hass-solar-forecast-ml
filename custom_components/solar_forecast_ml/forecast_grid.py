@@ -1,15 +1,15 @@
 # battery_grid_forecast.py
 
 import datetime
-from zoneinfo import ZoneInfo
 import logging
-from typing import Dict, List, Union
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import run_callback_threadsafe
+
 from .config import Configuration
-from . import const
+from .forecast_data import ForecastData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +32,9 @@ def _calculate_grid_exchange(
 def forecast_grid(
     hass: HomeAssistant,
     days: int,
-    solar_forecast_data,
-    consumption_forecast_data,
-    battery_forecast_data,
+    solar_forecast_data: ForecastData,
+    consumption_forecast_data: ForecastData,
+    battery_forecast_data: ForecastData,
 ):
     """Forecast energy export/import to the grid for the next `days` days."""
     _LOGGER.info("Forecasting grid export/import for the next %d days", days)
@@ -42,7 +42,7 @@ def forecast_grid(
 
     # Get forecasts and convert to DataFrames
     try:
-        solar_df = pd.DataFrame(solar_forecast_data)
+        solar_df = pd.DataFrame(solar_forecast_data.forecast)
         solar_df["time"] = pd.to_datetime(solar_df["time"], format="ISO8601")
         solar_df["hour"] = solar_df["time"].dt.floor("h")
         solar_hourly = solar_df.groupby("hour")["power"].mean()
@@ -51,7 +51,7 @@ def forecast_grid(
         return
 
     try:
-        cons_df = pd.DataFrame(consumption_forecast_data)
+        cons_df = pd.DataFrame(consumption_forecast_data.forecast)
         cons_df["time"] = pd.to_datetime(cons_df["time"], format="ISO8601")
         cons_df.set_index("time", inplace=True)
     except Exception as e:
@@ -59,7 +59,7 @@ def forecast_grid(
         return
 
     try:
-        batt_df = pd.DataFrame(battery_forecast_data)
+        batt_df = pd.DataFrame(battery_forecast_data.forecast)
         batt_df["time"] = pd.to_datetime(batt_df["time"], format="ISO8601")
         batt_df.set_index("time", inplace=True)
     except Exception as e:
@@ -140,4 +140,5 @@ def forecast_grid(
         "Grid forecast completed successfully with %d records",
         len(grid_forecast),
     )
-    return grid_forecast
+
+    return ForecastData(grid_forecast, now, "min", "med", "max")

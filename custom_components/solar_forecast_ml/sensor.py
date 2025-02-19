@@ -103,8 +103,8 @@ class ForecastSensor(CoordinatorEntity[ForecastCoordinator], SensorEntity):
         self._handle_update()
 
     def _handle_update(self):
-        forecasts = self.coordinator.data["forecasts"]
+        forecasts = self.coordinator.data
         if self._id in forecasts:
             forecast_data = forecasts[self._id]
             self._state = 0
-            self._attributes = forecast_data
+            self._attributes = {"forecast": forecast_data.forecast}

@@ -9,8 +9,9 @@ from sklearn.preprocessing import StandardScaler
 
 from homeassistant.core import HomeAssistant
 
-from . import const, dal
+from . import dal
 from .config import Configuration
+from .forecast_data import ForecastData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -178,4 +179,5 @@ async def generate_predictions(
         "Consumption predictions completed successfully with %d records",
         len(predictions),
     )
-    return predictions
+
+    return ForecastData(predictions, datetime.now(tz), "min", "med", "max")

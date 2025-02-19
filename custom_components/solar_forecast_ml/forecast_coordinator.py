@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Any, TypedDict, Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
@@ -10,25 +10,19 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import (
+    const,
     forecast_battery,
     forecast_consumption,
     forecast_grid,
     forecast_solar,
-    const,
 )
 from .config import Configuration
+from .forecast_data import ForecastData
 
 _LOGGER = logging.getLogger(__name__)
 
 PREDICT_DAYS_FORWARD = 7
 PREDICT_DAYS_BACK = 3
-
-
-class ForecastData(TypedDict):
-    """Type for storing forecast data with prediction timestamp."""
-
-    forecast: list[dict[str, Any]]
-    updated_at: datetime
 
 
 @dataclass
@@ -87,7 +81,7 @@ def _get_prediction_window(
     return prediction_from, prediction_to
 
 
-class ForecastCoordinator(DataUpdateCoordinator):
+class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
     """Coordinator to run periodic prediction and training tasks sequentially."""
 
     def __init__(self, hass: HomeAssistant):
@@ -160,8 +154,8 @@ class ForecastCoordinator(DataUpdateCoordinator):
                     forecast_battery.forecast_battery_capacity,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
-                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST)["forecast"],
-                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION)["forecast"],
+                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST),
+                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION),
                 ),
             ),
             PredictionTask(
@@ -172,9 +166,9 @@ class ForecastCoordinator(DataUpdateCoordinator):
                     forecast_grid.forecast_grid,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
-                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST)["forecast"],
-                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION)["forecast"],
-                    self.forecasts.get(const.SENSOR_PV_BATTERY_FORECAST)["forecast"],
+                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST),
+                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION),
+                    self.forecasts.get(const.SENSOR_PV_BATTERY_FORECAST),
                 ),
             ),
         ]
@@ -201,12 +195,8 @@ class ForecastCoordinator(DataUpdateCoordinator):
                 try:
                     forecast_data = await task.predict_callable()
 
-                    forecast_entry: ForecastData = {
-                        "forecast": forecast_data,
-                        "updated_at": now,
-                    }
-                    self.forecasts[task.sensor_key] = forecast_entry
-                    executed_forecasts[task.sensor_key] = forecast_entry
+                    self.forecasts[task.sensor_key] = forecast_data
+                    executed_forecasts[task.sensor_key] = forecast_data
                     task.mark_updated(now)
                     _LOGGER.info("%s completed successfully", task.name)
                 except Exception as e:
@@ -219,17 +209,4 @@ class ForecastCoordinator(DataUpdateCoordinator):
                         raise ConfigEntryNotReady from e
                     _LOGGER.error("Error during %s: %s", task.name, e)
 
-        return {
-            "updated_at": now.isoformat(),
-            "forecasts": executed_forecasts,
-        }
-
-    def get_forecast(self, sensor_key: str) -> list[dict[str, Any]] | None:
-        """Get the stored forecast data for a specific sensor."""
-        if (forecast := self.forecasts.get(sensor_key)) is not None:
-            return forecast["forecast"]
-        return None
-
-    def get_forecast_info(self, sensor_key: str) -> ForecastData | None:
-        """Get the complete forecast information including prediction timestamp."""
-        return self.forecasts.get(sensor_key)
+        return executed_forecasts

@@ -9,9 +9,10 @@ from sklearn.preprocessing import StandardScaler
 
 from homeassistant.core import HomeAssistant
 
-from . import const, dal
+from . import dal
 from .config import Configuration
 from .dal import METEO_PARAMS
+from .forecast_data import ForecastData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -117,7 +118,8 @@ async def collect_and_predict(
     _LOGGER.info(
         "Power consumption forecast completed successfully with %d records", len(result)
     )
-    return result
+    now = datetime.now(ZoneInfo(cfg.timezone))
+    return ForecastData(result, now, None, "power", None)
 
 
 def train_model(data_df, model_path, scaler_path):
@@ -183,4 +185,4 @@ def predict_power(model, scaler, forecast_data):
     X = df[feature_cols].values
     X_scaled = scaler.transform(X)
     predictions = model.predict(X_scaled)
-    return predictions.flatten().tolist()
+    return predictions

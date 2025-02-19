@@ -6,8 +6,7 @@ import pandas as pd
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import run_callback_threadsafe
-
-from . import const
+from .forecast_data import ForecastData
 from .config import Configuration
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,7 +27,10 @@ def _calculate_battery_energy(
 
 
 def forecast_battery_capacity(
-    hass: HomeAssistant, days: int, solar_forecast_data, consumption_forecast_data
+    hass: HomeAssistant,
+    days: int,
+    solar_forecast_data: ForecastData,
+    consumption_forecast_data: ForecastData,
 ):
     """Forecast the battery capacity (in %) for the next 'days' days."""
     _LOGGER.info("Forecasting battery capacity for the next %d days", days)
@@ -47,7 +49,7 @@ def forecast_battery_capacity(
     )
 
     # Get solar forecast and convert to pandas DataFrame
-    solar_forecast = pd.DataFrame(solar_forecast_data)
+    solar_forecast = pd.DataFrame(solar_forecast_data.forecast)
     solar_forecast["time"] = pd.to_datetime(solar_forecast["time"])
     solar_forecast["hour"] = solar_forecast["time"].dt.floor(
         "h"
@@ -57,7 +59,7 @@ def forecast_battery_capacity(
     solar_hourly = solar_forecast.groupby("hour")["power"].mean().to_dict()
 
     # Get consumption forecast and convert to pandas DataFrame
-    cons_forecast = pd.DataFrame(consumption_forecast_data)
+    cons_forecast = pd.DataFrame(consumption_forecast_data.forecast)
     cons_forecast["time"] = pd.to_datetime(cons_forecast["time"])
     cons_forecast.set_index("time", inplace=True)
 
@@ -144,4 +146,4 @@ def forecast_battery_capacity(
         "Battery capacity forecast completed successfully with %d records",
         len(forecast_results),
     )
-    return forecast_results
+    return ForecastData(forecast_results, now, "min", "med", "max")
