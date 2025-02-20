@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from .forecast_daily_summary import ForecastDailySummary
+
 
 @dataclass
 class ForecastData:
@@ -12,3 +14,5 @@ class ForecastData:
     value_field_min: str
     value_field_med: str
     value_field_max: str
+    daily_summaries: list[ForecastDailySummary] | None = None
+    today_summary: ForecastDailySummary | None = None

@@ -18,6 +18,7 @@ from . import (
 )
 from .config import Configuration
 from .forecast_data import ForecastData
+from .forecast_summary import aggregate_daily_forecast
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class PredictionTask:
     name: str
     update_interval: timedelta
     sensor_key: str
-    predict_callable: Callable[..., Any]
+    predict_callable: Callable[..., ForecastData]
     last_run: Optional[datetime] = None
 
     def needs_update(self, now: datetime) -> bool:
@@ -193,10 +194,11 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
         for task in self.prediction_tasks:
             if task.needs_update(now):
                 try:
-                    forecast_data = await task.predict_callable()
+                    forecast_data: ForecastData = await task.predict_callable()
 
                     self.forecasts[task.sensor_key] = forecast_data
                     executed_forecasts[task.sensor_key] = forecast_data
+                    aggregate_daily_forecast(forecast_data)
                     task.mark_updated(now)
                     _LOGGER.info("%s completed successfully", task.name)
                 except Exception as e:

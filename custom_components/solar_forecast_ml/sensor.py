@@ -80,17 +80,6 @@ class ForecastSensor(CoordinatorEntity[ForecastCoordinator], SensorEntity):
         """Return True if the sensor is available."""
         return True
 
-    def update_forecast(self, forecast):
-        """Update the sensor state and attributes.
-
-        :param state: The current forecast value (e.g. next interval's prediction)
-        :param forecast: A list of forecast values (e.g. a timeline of predictions)
-        """
-        config = Configuration.get_instance()
-        self._state = datetime.now(ZoneInfo(config.timezone))
-        self._attributes = {"forecast": forecast}
-        self.async_write_ha_state()
-
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -106,5 +95,5 @@ class ForecastSensor(CoordinatorEntity[ForecastCoordinator], SensorEntity):
         forecasts = self.coordinator.data
         if self._id in forecasts:
             forecast_data = forecasts[self._id]
-            self._state = 0
+            self._state = forecast_data.today_summary.med_max
             self._attributes = {"forecast": forecast_data.forecast}
