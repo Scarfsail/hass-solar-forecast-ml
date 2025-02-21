@@ -52,7 +52,7 @@ class PredictionTask:
 
     name: str
     update_interval: timedelta
-    sensor_key: str
+    forecast_key: str
     predict_callable: Callable[..., ForecastData]
     last_run: Optional[datetime] = None
 
@@ -124,7 +124,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
             PredictionTask(
                 name="Solar prediction",
                 update_interval=timedelta(minutes=15),
-                sensor_key=const.SENSOR_PV_POWER_FORECAST,
+                forecast_key=const.FORECAST_DATA_PV_POWER,
                 predict_callable=lambda: forecast_solar.collect_and_predict(
                     self.hass,
                     *_get_prediction_window(
@@ -137,7 +137,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
             PredictionTask(
                 name="Consumption prediction",
                 update_interval=timedelta(minutes=15),
-                sensor_key=const.SENSOR_PV_POWER_CONSUMPTION,
+                forecast_key=const.FORECAST_DATA_POWER_CONSUMPTION,
                 predict_callable=lambda: forecast_consumption.generate_predictions(
                     self.hass,
                     *_get_prediction_window(
@@ -150,26 +150,26 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
             PredictionTask(
                 name="Battery prediction",
                 update_interval=timedelta(minutes=1),
-                sensor_key=const.SENSOR_PV_BATTERY_FORECAST,
+                forecast_key=const.FORECAST_DATA_BATTERY,
                 predict_callable=lambda: self.hass.async_add_executor_job(
                     forecast_battery.forecast_battery_capacity,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
-                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST),
-                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION),
+                    self.forecasts.get(const.FORECAST_DATA_PV_POWER),
+                    self.forecasts.get(const.FORECAST_DATA_POWER_CONSUMPTION),
                 ),
             ),
             PredictionTask(
                 name="Grid prediction",
                 update_interval=timedelta(minutes=1),
-                sensor_key=const.SENSOR_PV_GRID_FORECAST,
+                forecast_key=const.FORECAST_DATA_GRID,
                 predict_callable=lambda: self.hass.async_add_executor_job(
                     forecast_grid.forecast_grid,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
-                    self.forecasts.get(const.SENSOR_PV_POWER_FORECAST),
-                    self.forecasts.get(const.SENSOR_PV_POWER_CONSUMPTION),
-                    self.forecasts.get(const.SENSOR_PV_BATTERY_FORECAST),
+                    self.forecasts.get(const.FORECAST_DATA_PV_POWER),
+                    self.forecasts.get(const.FORECAST_DATA_POWER_CONSUMPTION),
+                    self.forecasts.get(const.FORECAST_DATA_BATTERY),
                 ),
             ),
         ]
@@ -196,9 +196,8 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
                 try:
                     forecast_data: ForecastData = await task.predict_callable()
 
-                    self.forecasts[task.sensor_key] = forecast_data
-                    executed_forecasts[task.sensor_key] = forecast_data
-                    aggregate_daily_forecast(forecast_data)
+                    self.forecasts[task.forecast_key] = forecast_data
+                    executed_forecasts[task.forecast_key] = forecast_data
                     task.mark_updated(now)
                     _LOGGER.info("%s completed successfully", task.name)
                 except Exception as e:
