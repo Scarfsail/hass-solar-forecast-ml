@@ -82,8 +82,8 @@ def forecast_grid(
     current_hour = now.replace(minute=0, second=0, microsecond=0)
     start_sim = (
         current_hour
-        if now == current_hour
-        else current_hour + datetime.timedelta(hours=1)
+        # if now == current_hour
+        # else current_hour + datetime.timedelta(hours=1)
     )
     end_sim = start_sim + datetime.timedelta(hours=days * 24)
 

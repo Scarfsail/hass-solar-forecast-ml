@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from zoneinfo import ZoneInfo
 
@@ -26,11 +26,6 @@ async def async_setup_entry(
             coordinator,
             "pv_solar_power_forecast",
             "Solar Panels Forecast",
-        ),
-        ForecastSensorSolarNow(
-            coordinator,
-            "pv_solar_power_forecast_now",
-            "Solar Panels Forecast Now",
         ),
         ForecastSensorPowerConsumption(
             coordinator,
@@ -66,15 +61,17 @@ def get_forecast_records_for_rest_of_today(forecast_data: ForecastData):
     )
 
 
-def get_nearest_forecast_record(forecast_data: ForecastData) -> float | None:
+def get_nearest_forecast_record(forecast_data: ForecastData):
     now = datetime.now(ZoneInfo(config.Configuration.get_instance().timezone))
 
+    last_past_point = None
     for point in forecast_data.forecast:
         point_time = datetime.fromisoformat(point["time"])
-        if point_time >= now:
-            return point[forecast_data.value_field_med]
+        if point_time > now:
+            break
+        last_past_point = point
 
-    return None
+    return last_past_point[forecast_data.value_field_med] if last_past_point else None
 
 
 class ForecastSensorSolar(ForecastSensorBase):
@@ -82,13 +79,13 @@ class ForecastSensorSolar(ForecastSensorBase):
         return const.FORECAST_DATA_PV_POWER
 
     def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(sum(get_forecast_records_for_rest_of_today(forecast_data)) / 4), {
+        return round(get_nearest_forecast_record(forecast_data)), {
             "forecast": forecast_data.forecast
         }
 
     @property
     def unit_of_measurement(self):
-        return "Wh"
+        return "W"
 
 
 class ForecastSensorPowerConsumption(ForecastSensorBase):
@@ -96,13 +93,13 @@ class ForecastSensorPowerConsumption(ForecastSensorBase):
         return const.FORECAST_DATA_POWER_CONSUMPTION
 
     def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(sum(get_forecast_records_for_rest_of_today(forecast_data))), {
+        return round(get_nearest_forecast_record(forecast_data)), {
             "forecast": forecast_data.forecast
         }
 
     @property
     def unit_of_measurement(self):
-        return "Wh"
+        return "W"
 
 
 class ForecastSensorGrid(ForecastSensorBase):
@@ -110,13 +107,13 @@ class ForecastSensorGrid(ForecastSensorBase):
         return const.FORECAST_DATA_GRID
 
     def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(sum(get_forecast_records_for_rest_of_today(forecast_data))), {
+        return round(get_nearest_forecast_record(forecast_data)), {
             "forecast": forecast_data.forecast
         }
 
     @property
     def unit_of_measurement(self):
-        return "Wh"
+        return "W"
 
 
 class ForecastSensorBattery(ForecastSensorBase):
@@ -124,7 +121,7 @@ class ForecastSensorBattery(ForecastSensorBase):
         return const.FORECAST_DATA_BATTERY
 
     def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(max(get_forecast_records_for_rest_of_today(forecast_data))), {
+        return round(get_nearest_forecast_record(forecast_data)), {
             "forecast": forecast_data.forecast,
         }
 
