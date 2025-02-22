@@ -22,10 +22,10 @@ async def async_setup_entry(
     coordinator: ForecastCoordinator = hass.data[const.DOMAIN][const.COORDINATOR]
 
     forecast_sensors = [
-        ForecastSensorSolar(
+        ForecastSensorSolarPower(
             coordinator,
-            "pv_solar_power_forecast",
-            "Solar Panels Forecast",
+            "pv_solar_panels_power_forecast",
+            "Solar Panels Power Forecast",
         ),
         ForecastSensorPowerConsumption(
             coordinator,
@@ -37,10 +37,30 @@ async def async_setup_entry(
             "pv_battery_capacity_forecast",
             "Battery Capacity Forecast",
         ),
-        ForecastSensorGrid(
+        ForecastSensorGridPower(
             coordinator,
-            "pv_grid_forecast",
-            "Grid export / import Forecast",
+            "pv_grid_power_forecast",
+            "Grid export / import power Forecast",
+        ),
+        ForecastSensorSolarEnergyToday(
+            coordinator,
+            "pv_solar_panels_energy_forecast_today",
+            "Solar Panels Energy Forecast (Today)",
+        ),
+        ForecastSensorGridEnergyToday(
+            coordinator,
+            "pv_grid_energy_forecast_today",
+            "Grid export / import energy Forecast (Today)",
+        ),
+        ForecastSensorSolarEnergyRestOfToday(
+            coordinator,
+            "pv_solar_panels_forecast_energy_rest_of_today",
+            "Solar Panels energy Forecast (Rest of Today)",
+        ),
+        ForecastSensorGridEnergyRestOfToday(
+            coordinator,
+            "pv_grid_energy_forecast_rest_of_today",
+            "Grid export / import energy Forecast (Rest of Today)",
         ),
     ]
 
@@ -61,6 +81,17 @@ def get_forecast_records_for_rest_of_today(forecast_data: ForecastData):
     )
 
 
+def get_forecast_records_for_today(forecast_data: ForecastData):
+    now = datetime.now(ZoneInfo(config.Configuration.get_instance().timezone))
+    today = now.date()
+
+    return (
+        point[forecast_data.value_field_med]
+        for point in forecast_data.forecast
+        if datetime.fromisoformat(point["time"]).date() == today
+    )
+
+
 def get_nearest_forecast_record(forecast_data: ForecastData):
     now = datetime.now(ZoneInfo(config.Configuration.get_instance().timezone))
 
@@ -74,7 +105,7 @@ def get_nearest_forecast_record(forecast_data: ForecastData):
     return last_past_point[forecast_data.value_field_med] if last_past_point else None
 
 
-class ForecastSensorSolar(ForecastSensorBase):
+class ForecastSensorSolarPower(ForecastSensorBase):
     def _get_forecast_data_key(self) -> str:
         return const.FORECAST_DATA_PV_POWER
 
@@ -102,20 +133,6 @@ class ForecastSensorPowerConsumption(ForecastSensorBase):
         return "W"
 
 
-class ForecastSensorGrid(ForecastSensorBase):
-    def _get_forecast_data_key(self):
-        return const.FORECAST_DATA_GRID
-
-    def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(get_nearest_forecast_record(forecast_data)), {
-            "forecast": forecast_data.forecast
-        }
-
-    @property
-    def unit_of_measurement(self):
-        return "W"
-
-
 class ForecastSensorBattery(ForecastSensorBase):
     def _get_forecast_data_key(self):
         return const.FORECAST_DATA_BATTERY
@@ -130,13 +147,63 @@ class ForecastSensorBattery(ForecastSensorBase):
         return "%"
 
 
-class ForecastSensorSolarNow(ForecastSensorBase):
-    def _get_forecast_data_key(self) -> str:
-        return const.FORECAST_DATA_PV_POWER
+class ForecastSensorGridPower(ForecastSensorBase):
+    def _get_forecast_data_key(self):
+        return const.FORECAST_DATA_GRID
 
     def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
-        return round(get_nearest_forecast_record(forecast_data)), {}
+        return round(get_nearest_forecast_record(forecast_data)), {
+            "forecast": forecast_data.forecast
+        }
 
     @property
     def unit_of_measurement(self):
         return "W"
+
+
+class ForecastSensorSolarEnergyToday(ForecastSensorBase):
+    def _get_forecast_data_key(self) -> str:
+        return const.FORECAST_DATA_PV_POWER
+
+    def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
+        return round(sum(get_forecast_records_for_today(forecast_data)) / 4), {}
+
+    @property
+    def unit_of_measurement(self):
+        return "Wh"
+
+
+class ForecastSensorGridEnergyToday(ForecastSensorBase):
+    def _get_forecast_data_key(self):
+        return const.FORECAST_DATA_GRID
+
+    def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
+        return round(sum(get_forecast_records_for_today(forecast_data))), {}
+
+    @property
+    def unit_of_measurement(self):
+        return "Wh"
+
+
+class ForecastSensorSolarEnergyRestOfToday(ForecastSensorBase):
+    def _get_forecast_data_key(self) -> str:
+        return const.FORECAST_DATA_PV_POWER
+
+    def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
+        return round(sum(get_forecast_records_for_rest_of_today(forecast_data)) / 4), {}
+
+    @property
+    def unit_of_measurement(self):
+        return "Wh"
+
+
+class ForecastSensorGridEnergyRestOfToday(ForecastSensorBase):
+    def _get_forecast_data_key(self):
+        return const.FORECAST_DATA_GRID
+
+    def _get_state_and_attr_from_forecast(self, forecast_data: ForecastData):
+        return round(sum(get_forecast_records_for_rest_of_today(forecast_data))), {}
+
+    @property
+    def unit_of_measurement(self):
+        return "Wh"
