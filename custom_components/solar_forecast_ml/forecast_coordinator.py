@@ -11,10 +11,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import (
     const,
-    forecast_battery,
-    forecast_consumption,
-    forecast_grid,
-    forecast_solar,
+    forecast_calc_battery,
+    forecast_calc_consumption,
+    forecast_calc_grid,
+    forecast_calc_solar,
 )
 from .config import Configuration
 from .forecast_data import ForecastData
@@ -105,16 +105,16 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
             TrainingTask(
                 name="Solar training",
                 training_interval=timedelta(hours=24),
-                is_trained_check=forecast_solar.is_model_trained,
-                last_trained_check=forecast_solar.when_model_was_trained,
-                train_callable=forecast_solar.collect_and_train,
+                is_trained_check=forecast_calc_solar.is_model_trained,
+                last_trained_check=forecast_calc_solar.when_model_was_trained,
+                train_callable=forecast_calc_solar.collect_and_train,
             ),
             TrainingTask(
                 name="Consumption training",
                 training_interval=timedelta(hours=24),
-                is_trained_check=forecast_consumption.is_model_trained,
-                last_trained_check=forecast_consumption.when_model_was_trained,
-                train_callable=forecast_consumption.collect_and_train,
+                is_trained_check=forecast_calc_consumption.is_model_trained,
+                last_trained_check=forecast_calc_consumption.when_model_was_trained,
+                train_callable=forecast_calc_consumption.collect_and_train,
             ),
         ]
 
@@ -124,7 +124,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
                 name="Solar prediction",
                 update_interval=timedelta(minutes=15),
                 forecast_key=const.FORECAST_DATA_PV_POWER,
-                predict_callable=lambda: forecast_solar.collect_and_predict(
+                predict_callable=lambda: forecast_calc_solar.collect_and_predict(
                     self.hass,
                     *_get_prediction_window(
                         datetime.now(ZoneInfo(self.config.timezone)),
@@ -137,7 +137,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
                 name="Consumption prediction",
                 update_interval=timedelta(minutes=15),
                 forecast_key=const.FORECAST_DATA_POWER_CONSUMPTION,
-                predict_callable=lambda: forecast_consumption.generate_predictions(
+                predict_callable=lambda: forecast_calc_consumption.generate_predictions(
                     self.hass,
                     *_get_prediction_window(
                         datetime.now(ZoneInfo(self.config.timezone)),
@@ -151,7 +151,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
                 update_interval=timedelta(minutes=1),
                 forecast_key=const.FORECAST_DATA_BATTERY,
                 predict_callable=lambda: self.hass.async_add_executor_job(
-                    forecast_battery.forecast_battery_capacity,
+                    forecast_calc_battery.forecast_battery_capacity,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
                     self.forecasts.get(const.FORECAST_DATA_PV_POWER),
@@ -163,7 +163,7 @@ class ForecastCoordinator(DataUpdateCoordinator[dict[str, ForecastData]]):
                 update_interval=timedelta(minutes=1),
                 forecast_key=const.FORECAST_DATA_GRID,
                 predict_callable=lambda: self.hass.async_add_executor_job(
-                    forecast_grid.forecast_grid,
+                    forecast_calc_grid.forecast_grid,
                     self.hass,
                     PREDICT_DAYS_FORWARD,
                     self.forecasts.get(const.FORECAST_DATA_PV_POWER),

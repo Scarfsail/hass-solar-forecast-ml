@@ -7,7 +7,6 @@ from . import const
 from .config import Configuration
 from .const import DOMAIN
 from .forecast_coordinator import ForecastCoordinator
-from .services import register_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +32,6 @@ async def async_setup_entry(hass: HomeAssistant, entry):
     hass.data.setdefault(DOMAIN, {})["config"] = config
 
     Configuration.get_instance().set_config(config, hass)
-    register_services(hass)
 
     coordinator = ForecastCoordinator(hass)
     await coordinator.async_config_entry_first_refresh()
