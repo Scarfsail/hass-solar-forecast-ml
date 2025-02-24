@@ -8,6 +8,14 @@ An integration to forecast solar power production using historical production an
 - Uses historical data and weather information processed with ML.
 - Exposes sensors/entities to Home Assistant for automations and monitoring.
 
+## Predictions
+
+This integration uses ML models to predict:
+- Future photovoltaic (PV) power production based on historical production and weather data.
+- Expected household power consumption.
+- Battery capacity (based on the predicted power panels production and predicted household power consumption).
+These predictions help you optimize energy usage and plan for solar production variability.
+
 ## Installation
 
 - Manual Installation:
@@ -78,6 +86,7 @@ solar_forecast_ml:
 Once installed and configured, the integration will create sensors and services for solar forecasting.
 - Check the Home Assistant logs for startup messages.
 - Use the provided sensors in your dashboards and automations.
+
 
 ## Troubleshooting
 
