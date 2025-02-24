@@ -87,6 +87,18 @@ Once installed and configured, the integration will create sensors and services 
 - Check the Home Assistant logs for startup messages.
 - Use the provided sensors in your dashboards and automations.
 
+## How Does It Work?
+
+Every 24 hours, the system re-trains its models using historical data:
+- Two models are maintained:
+  - Solar Panels Power Production: Uses the past 90 days of real solar power production data from this system along with weather data from Open Meteo.
+  - House Power Consumption: Uses the past 90 days of consumption data, enriched with day-of-week and hour-of-day information to capture usage patterns.  
+    Three sub-models are built for consumption:
+    - Min Consumption: Predicts the minimal energy usage.
+    - Median Consumption: Predicts the typical energy usage.
+    - Max Consumption: Predicts the maximum potential energy usage.
+
+From these models, predictions for solar panels power production and house power consumption are generated. These values are then used to calculate grid export/import and determine battery capacity for upcoming 7 days on hourly basis.
 
 ## Troubleshooting
 
