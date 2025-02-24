@@ -18,12 +18,11 @@ from . import (
 )
 from .config import Configuration
 from .forecast_data import ForecastData
-from .forecast_summary import aggregate_daily_forecast
 
 _LOGGER = logging.getLogger(__name__)
 
 PREDICT_DAYS_FORWARD = 7
-PREDICT_DAYS_BACK = 3
+PREDICT_DAYS_BACK = 0
 
 
 @dataclass
